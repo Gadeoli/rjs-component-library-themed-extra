@@ -1,0 +1,7 @@
+/node_modules
+/dist
+.DS_Store
+!/storybook-static
+/storybook-static/*
+/storybook-static/**
+package-lock.json
