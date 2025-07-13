@@ -1,4 +1,4 @@
-# RJS Component Library Themed
+# RJS Component Library Themed Extra
 
 (A test for now) A reactjs component library with theme support. Here will be extra components not present in default library.  
 
