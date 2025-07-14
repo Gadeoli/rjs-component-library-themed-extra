@@ -362,6 +362,8 @@ export const usePhotoEditor = ({
         offsetY,
         /** Current action ('pan' or 'draw') */
         action,
+        /** Current actions history */
+        history,
         /** Current line color. */
         lineColor,
         /** Current line width. */
@@ -418,6 +420,8 @@ export const usePhotoEditor = ({
         applyFilter,
         /** Function to set the action. */
         setAction,
+        /** Function to set history */
+        setHistory,
         /** Function to set the line color. */
         setLineColor,
         /** Function to set the line width. */

@@ -1,4 +1,4 @@
-import React, { FC, useMemo, useState } from 'react';
+import React, { FC, useEffect, useMemo, useState } from 'react';
 import { ImageEditorProps } from './ImageEditor.types';
 import { useTheme } from '../ThemeHandler';
 import { handleCssClassnames } from '@gadeoli/js-helpers-library';
@@ -33,7 +33,7 @@ const ImageEditor: FC<ImageEditorProps> = ({
         zoom: true,
         drawing: true,
         text: true,
-        write: true
+        write: false
     },
     labels = {
         brightness: {txt: 'Brightness'},
@@ -66,13 +66,6 @@ const ImageEditor: FC<ImageEditorProps> = ({
         loading ? 'loading-effect' : undefined,
         className
     ]);
-
-    const radioActionValues = [
-        {key: 'draw', value: labels['draw'].txt},
-        {key: 'write', value: labels['write'].txt},
-        {key: 'flip', value: labels['flip'].txt},
-        {key: 'pan', value: labels['pan'].txt},
-    ];
 
     const usePhotoEditorProps = usePhotoEditor({ src });
     const {
@@ -117,6 +110,7 @@ const ImageEditor: FC<ImageEditorProps> = ({
     ]);
 
     //state
+    const [radioActionValues, setRadioActionValues] = useState<{key: string, value: string}[]>([]);
     const [showSubActions, setShowSubActions] = useState(false);
     //state - end
 
@@ -129,6 +123,32 @@ const ImageEditor: FC<ImageEditorProps> = ({
             setShowSubActions(true);
         }
     }
+
+    const handleCanvasActions = () => {
+        const aux = [];
+
+        if(actions.drawing){
+            aux.push({key: 'draw', value: labels['draw'].txt});
+        }
+
+        if(actions.flip){
+            aux.push({key: 'flip', value: labels['flip'].txt});
+        }
+
+        if(actions.write){
+            aux.push({key: 'write', value: labels['write'].txt})
+        }
+
+        if(actions.zoom){
+            aux.push({key: 'pan', value: labels['pan'].txt})
+        }
+
+        setRadioActionValues(aux);
+    }
+
+    useEffect(() => {
+        handleCanvasActions();
+    }, []);
 
     return (<Container type='clean' className={classNames} style={style}>
         {imageSrc && (<CanvasContainer>
@@ -151,9 +171,9 @@ const ImageEditor: FC<ImageEditorProps> = ({
                     &#128469;
                 </Button>
                 {   
-                    action === 'draw' ? (<ActionDrawOptions usePhotoEditorProps={usePhotoEditorProps} loading={loading} />) : 
-                    action === 'write' ? (<ActionWriteOptions usePhotoEditorProps={usePhotoEditorProps} loading={loading} labels={labels} />) : 
-                    action === 'flip' ? (<ActionFlipOptions usePhotoEditorProps={usePhotoEditorProps} loading={loading} labels={labels}/>) : 
+                    actions.drawing && action === 'draw' ? (<ActionDrawOptions usePhotoEditorProps={usePhotoEditorProps} loading={loading} />) : 
+                    actions.write && action === 'write' ? (<ActionWriteOptions usePhotoEditorProps={usePhotoEditorProps} loading={loading} labels={labels} />) : 
+                    actions.flip && action === 'flip' ? (<ActionFlipOptions usePhotoEditorProps={usePhotoEditorProps} loading={loading} labels={labels}/>) : 
                     ('')
                 }
             </SubActionContainer>
@@ -252,7 +272,8 @@ const ActionDrawOptions: FC<{usePhotoEditorProps: any, loading: boolean | undefi
             min={2}
             max={100}
         />
-        {<Checkbox
+        {/* Not implement */}
+        {/* {<Checkbox
             name='line-style'
             type='primary' 
             checkedValue={'hand-free'}
@@ -263,7 +284,7 @@ const ActionDrawOptions: FC<{usePhotoEditorProps: any, loading: boolean | undefi
             text={<>&#9997;</>}
             checkedIcon={true}
             style={{marginLeft: '0.5rem'}}
-        />}
+        />} */}
     </SubAction>;
 }
 

@@ -78,6 +78,12 @@ export interface ImageEditorActionsProps {
      * @default true
      */
     drawing?: boolean;
+
+    /**
+     * Whether to enable write options.
+     * @default true
+     */
+    write?: boolean;
 }
 
 export interface ImageEditorTranslationsProps {
