@@ -3,7 +3,7 @@ import { ImageEditorProps } from './ImageEditor.types';
 import { useTheme } from '../ThemeHandler';
 import { handleCssClassnames } from '@gadeoli/js-helpers-library';
 import styled from 'styled-components';
-import { usePhotoEditor } from './useEditor';
+import usePhotoEditor from './usePhotoEditor';
 import { transparentize } from 'polished';
 import { 
     Container,
@@ -45,7 +45,7 @@ const ImageEditor: FC<ImageEditorProps> = ({
         flip: {txt: 'Flip'},
         grayscale: {txt: 'Grayscale'},
         horizontal: {txt: 'Horizontally'},
-        pan: {txt: 'Pan'}, //Mover / Arrastar
+        pan: {txt: 'Pan & Zoom'}, //Mover / Arrastar
         reset: {txt: 'Reset'},
         rotate: {txt: 'Rotate'},
         saturate: {txt: 'Saturate'},
@@ -69,7 +69,8 @@ const ImageEditor: FC<ImageEditorProps> = ({
 
     const usePhotoEditorProps = usePhotoEditor({ src });
     const {
-        canvasRef,
+        imageCanvasRef,
+        editorCanvasRef,
         imageSrc,
         brightness,
         setBrightness,
@@ -153,18 +154,15 @@ const ImageEditor: FC<ImageEditorProps> = ({
     return (<Container type='clean' className={classNames} style={style}>
         {imageSrc && (<CanvasContainer>
             <Canvas
-                style={{
-                    width: 'auto',
-                    height: 'auto',
-                    maxHeight: '26rem',
-                    maxWidth: '70%',
-                    touchAction: 'none',
-                }}
-                ref={canvasRef}
+                ref={imageCanvasRef}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onWheel={handleWheel}
+            />
+            <Canvas
+                ref={editorCanvasRef}
+                className='layer-editor'
             />
             <SubActionContainer theme={theme} $show={showSubActions}>
                 <Button type='clean' className='sub-action-minimaze' onClick={() => setShowSubActions(false)}>
@@ -272,8 +270,7 @@ const ActionDrawOptions: FC<{usePhotoEditorProps: any, loading: boolean | undefi
             min={2}
             max={100}
         />
-        {/* Not implement */}
-        {/* {<Checkbox
+        <Checkbox
             name='line-style'
             type='primary' 
             checkedValue={'hand-free'}
@@ -284,7 +281,7 @@ const ActionDrawOptions: FC<{usePhotoEditorProps: any, loading: boolean | undefi
             text={<>&#9997;</>}
             checkedIcon={true}
             style={{marginLeft: '0.5rem'}}
-        />} */}
+        />
     </SubAction>;
 }
 
@@ -388,10 +385,22 @@ const CanvasContainer = styled.div`
     position: relative;
     display: flex;
     justify-content: center;
+    position: relative;
 `;
 
 const Canvas = styled.canvas`
+    width: auto;
+    height: auto;
+    max-height: 26rem;
+    max-width: 70%;
 
+    &.layer-editor{
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+    }
 `;
 
 const Controls = styled.div`

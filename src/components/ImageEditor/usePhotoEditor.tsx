@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { UseImageEditorProps } from "./ImageEditor.types";
 
-export const usePhotoEditor = ({
+const usePhotoEditor = ({
     src,
     scales = {
         brightness: 100,
@@ -29,7 +29,9 @@ export const usePhotoEditor = ({
         }
     }
 }: UseImageEditorProps) => {
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const imageCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const editorCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
     const imgRef = useRef(new Image());
     const drawingPathsRef = useRef<
         { path: { x: number; y: number }[]; color: string; width: number }[]
@@ -67,6 +69,7 @@ export const usePhotoEditor = ({
     // Effect to update the image source when the src changes.
     useEffect(() => {
         setImageSrc(src ? src : '');
+        resetFilters();
     }, [src]);
 
     // Effect to apply transformations and filters whenever relevant state changes.
@@ -112,57 +115,79 @@ export const usePhotoEditor = ({
     const applyFilter = () => {
         if (!imageSrc) return;
 
-        const canvas = canvasRef.current;
-        const context = canvas?.getContext('2d');
+        const imageCanvas = imageCanvasRef.current;
+        const imageCtx = imageCanvas?.getContext('2d');
+
+        const editorCanvas = editorCanvasRef.current;
+        const editorCtx = editorCanvas?.getContext('2d');
 
         const imgElement = imgRef.current;
         imgRef.current.src = imageSrc;
         imgRef.current.onload = applyFilter;
 
         imgElement.onload = () => {
-            if (canvas && context) {
+            if (imageCanvas && imageCtx && editorCanvas && editorCtx) {
                 const zoomedWidth = imgElement.width * zoom;
                 const zoomedHeight = imgElement.height * zoom;
                 const translateX = (imgElement.width - zoomedWidth) / 2;
                 const translateY = (imgElement.height - zoomedHeight) / 2;
 
                 // Set canvas dimensions to match the image.
-                canvas.width = imgElement.width;
-                canvas.height = imgElement.height;
+                imageCanvas.width = imgElement.width;
+                imageCanvas.height = imgElement.height;
+
+                //Set the editor canvas dimensions to match the image
+                editorCanvas.width = imgElement.width;
+                editorCanvas.height = imgElement.height;
 
                 // Clear the canvas before drawing the updated image.
-                context.clearRect(0, 0, canvas.width, canvas.height);
+                imageCtx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
 
                 // Apply filters and transformations.
-                context.filter = getFilterString();
-                context.save();
+                imageCtx.filter = getFilterString();
+                imageCtx.save();
 
                 if (rotate) {
-                    const centerX = canvas.width / 2;
-                    const centerY = canvas.height / 2;
-                    context.translate(centerX, centerY);
-                    context.rotate((rotate * Math.PI) / 180);
-                    context.translate(-centerX, -centerY);
+                    const centerX = imageCanvas.width / 2;
+                    const centerY = imageCanvas.height / 2;
+                    const angle = (rotate * Math.PI) / 180;
+
+                    imageCtx.translate(centerX, centerY);
+                    imageCtx.rotate(angle);
+                    imageCtx.translate(-centerX, -centerY);
+
+                    editorCtx.translate(centerX, centerY);
+                    editorCtx.rotate(angle);
+                    editorCtx.translate(-centerX, -centerY);
                 }
 
                 if (flipHorizontal) {
-                    context.translate(canvas.width, 0);
-                    context.scale(-1, 1);
+                    imageCtx.translate(imageCanvas.width, 0);
+                    imageCtx.scale(-1, 1);
+
+                    editorCtx.translate(imageCanvas.width, 0);
+                    editorCtx.scale(-1, 1);
                 }
 
                 if (flipVertical) {
-                    context.translate(0, canvas.height);
-                    context.scale(1, -1);
+                    imageCtx.translate(0, imageCanvas.height);
+                    imageCtx.scale(1, -1);
+
+                    editorCtx.translate(0, imageCanvas.height);
+                    editorCtx.scale(1, -1);
                 }
 
-                context.translate(translateX + offsetX, translateY + offsetY);
-                context.scale(zoom, zoom);
-                context.drawImage(imgElement, 0, 0, canvas.width, canvas.height);
+                imageCtx.translate(translateX + offsetX, translateY + offsetY);
+                imageCtx.scale(zoom, zoom);
+                imageCtx.drawImage(imgElement, 0, 0, imageCanvas.width, imageCanvas.height);
+                imageCtx.restore();
+                imageCtx.filter = 'none';
 
-                context.restore();
-
-                context.filter = 'none';
-                redrawDrawingPaths(context);
+                editorCtx.translate(translateX + offsetX, translateY + offsetY);
+                editorCtx.scale(zoom, zoom);
+                imageCtx.restore();
+                imageCtx.filter = 'none';
+                redrawDrawingPaths(editorCtx);
             }
         };
     };
@@ -173,14 +198,43 @@ export const usePhotoEditor = ({
      */
     const generateEditedImage = (): Promise<string | null> => {
         return new Promise((resolve) => {
-            const canvas = canvasRef.current;
-            
-            if (!canvas || !src) {
+            const imageCanvas = imageCanvasRef.current;
+            const editorCanvas = editorCanvasRef.current;
+
+            if(!imageCanvas){
                 resolve(null);
                 return;
-            }
+            };
 
-            resolve(canvas.toDataURL());
+            const layersCanvas = [
+                imageCanvas, //let in first position
+                editorCanvas
+            ];
+
+            const mergedCanvas = document.createElement('canvas');
+            mergedCanvas.width = imageCanvas.width;
+            mergedCanvas.height = imageCanvas.height;
+            const mergedCtx = mergedCanvas.getContext('2d');
+
+            let cnvCounter = 0;
+
+            layersCanvas.forEach((cnv) => {
+                if(cnv){
+                    const dataURL = cnv.toDataURL();
+                    const image = new Image();
+
+                    image.onload = () => {
+                        mergedCtx?.drawImage(image, 0, 0);
+                        cnvCounter++;
+
+                        if(cnvCounter === layersCanvas.length){
+                            resolve(mergedCanvas.toDataURL('image/png'));
+                        }
+                    }
+
+                    image.src = dataURL;
+                }
+            })
         });
     };
 
@@ -212,7 +266,7 @@ export const usePhotoEditor = ({
      */
     const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
         if (action === 'draw') {
-            const canvas = canvasRef.current;
+            const canvas = editorCanvasRef.current;
             
             if (!canvas) return;
 
@@ -242,7 +296,7 @@ export const usePhotoEditor = ({
      */
     const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
         if (action === 'draw' && drawStart) {
-            const canvas = canvasRef.current;
+            const canvas = editorCanvasRef.current;
             const context = canvas?.getContext('2d');
             const rect = canvas?.getBoundingClientRect();
 
@@ -332,8 +386,10 @@ export const usePhotoEditor = ({
 
     // Expose the necessary state and handlers for external use.
     return {
-        /** Reference to the canvas element. */
-        canvasRef,
+        /** Reference to the canvas element that contain the image and is filters can be applyed. */
+        imageCanvasRef,
+        /** Reference to the canvas element that can recieve forms, write and other actions. */
+        editorCanvasRef,
         /** Source URL of the image being edited. */
         imageSrc,
         /** Current brightness level. */
@@ -436,3 +492,5 @@ export const usePhotoEditor = ({
         setTextFontSize
     };
 };
+
+export default usePhotoEditor;
