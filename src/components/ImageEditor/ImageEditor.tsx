@@ -84,6 +84,8 @@ const ImageEditor: FC<DefaultProps> = ({
         handlePointerUp,
         handlePointerMove,
         handleWheel,
+        handleRedo,
+        handleUndo,
     } = usePhotoEditorProps;
 
     const rangeActions = useMemo(() => [
@@ -142,6 +144,10 @@ const ImageEditor: FC<DefaultProps> = ({
     useEffect(() => {
         handleCanvasActions();
     }, []);
+
+    useEffect(() => {
+        console.log(usePhotoEditorProps);
+    }, [usePhotoEditorProps.drawTool]);
 
     return (<Container type='clean' className={classNames} style={style}>
         {imageSrc && (<CanvasContainer>
@@ -212,6 +218,24 @@ const ImageEditor: FC<DefaultProps> = ({
             <Action>
                 <Button onClick={() => {
                     resetFilters();
+                    setShowSubActions(false);
+                }}>
+                    &#8635;
+                </Button>
+            </Action>
+
+            <Action>
+                <Button onClick={() => {
+                    handleUndo();
+                    setShowSubActions(false);
+                }}>
+                    &#8635;
+                </Button>
+            </Action>
+
+            <Action>
+                <Button onClick={() => {
+                    handleRedo();
                     setShowSubActions(false);
                 }}>
                     &#8635;

@@ -71,14 +71,21 @@ export const drawArrowHead = (p0: PointProps, p1: PointProps, size: number): [Po
     return [left, right];
 };
 
-export const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>, canvasRef: any): PointProps => {
+export const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>, canvasRef: React.RefObject<HTMLCanvasElement | null>): PointProps => {
     const defaultPos = initialCords;
 
-    const rect = canvasRef.current?.getBoundingClientRect();
-    
-    if (!rect) return defaultPos;
-    
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const canvas = canvasRef.current;
+    const rect = canvas?.getBoundingClientRect();
+
+    if (!canvas || !rect) return defaultPos;
+
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    return { 
+        x: (e.clientX - rect.left) * scaleX, 
+        y: (e.clientY - rect.top) * scaleY 
+    };
 };
 
 /**

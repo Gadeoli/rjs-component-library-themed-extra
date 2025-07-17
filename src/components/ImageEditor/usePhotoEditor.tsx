@@ -33,7 +33,7 @@ const usePhotoEditor = ({
         drawSettings: {
             tool: 'pen',
             color: "#000000",
-            size: 2
+            size: 10
         },
         writeSettings: {
             text: '',
@@ -242,6 +242,7 @@ const usePhotoEditor = ({
                 
                 // Old Code - This is needed now ??call applyDraws is equal??
                 // redrawDrawingPaths(editorCtx);
+                applyDraws();
             }
         };
     };
@@ -516,7 +517,7 @@ const usePhotoEditor = ({
 
         if(!editorCanvas || !editorCtx || action !== 'write') return; 
         
-        const pos = getMousePos(e, editorCtx);
+        const pos = getMousePos(e, editorCanvasRef);
         const idx = texts.findIndex((t) => isInside(pos, t, editorCtx));
 
         if (idx !== -1) {
@@ -528,7 +529,7 @@ const usePhotoEditor = ({
             setWriteColor(t.color);
             setWriteRotation(t.rotation);
             setWriteScale(t.scale);
-            setWriteEditorPos({ x: pos.x, y: pos.y});
+            setWriteEditorPos(pos);
         } else {
             setSelectedIndex(null);
         }
@@ -545,7 +546,7 @@ const usePhotoEditor = ({
 
         pushUndo();
 
-        const pos = getMousePos(e, editorCtx);
+        const pos = getMousePos(e, editorCanvasRef);
         const newText: TextItemProps = {
           text: labels.writeInitial,
           x: pos.x,
@@ -596,7 +597,7 @@ const usePhotoEditor = ({
 
         if(!editorCanvas || !editorCtx) return; 
 
-        const pos = getMousePos(event, editorCtx);
+        const pos = getMousePos(event, editorCanvasRef);
 
         if (action === 'draw') {
             pushUndo();
@@ -608,6 +609,7 @@ const usePhotoEditor = ({
                 setCurrentPath([pos]);
             }
         }else if (action === 'pan') {
+            pushUndo();
             setIsDragging(true);
             
             const initialX = event.clientX - (flipHorizontal ? -editorOffset.x : editorOffset.x);
@@ -639,7 +641,7 @@ const usePhotoEditor = ({
 
         if(!editorCanvas || !editorCtx) return; 
 
-        const pos = getMousePos(event, editorCtx);
+        const pos = getMousePos(event, editorCanvasRef);
 
         if (action === 'draw' && isDrawing) {
             if (drawTool === 'line' || drawTool === 'arrow' || drawTool === 'circle') {
@@ -694,7 +696,7 @@ const usePhotoEditor = ({
 
     const finalizeDrawing = () => {
         if (!isDrawing) return;
-        
+
         if (drawTool === 'line' && currentPath.length === 2) {
             setDrawings((prev) => [
                 ...prev,
@@ -742,11 +744,16 @@ const usePhotoEditor = ({
         setFlipHorizontal(positions.flipHorizontal);
         setFlipVertical(positions.flipVertical);
         setZoom(positions.zoom);
+
         setEditorOffset(initialCords);
         setIsDragging(false);
         setAction('draw');
-        applyFilters();
-        applyDraws();
+
+        setDrawTool('pen');
+        setDrawings([]);
+        setTexts([]);
+        setPans([]);
+        setTexts([]);
     };
 
     // Expose the necessary state and handlers for external use.
