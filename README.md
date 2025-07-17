@@ -1,12 +1,15 @@
 # RJS Component Library Themed Extra
 
-(A test for now) A reactjs component library with theme support. Here will be extra components not present in default library.  
+(A test for now) This is a component-library-themed to extend @gadeoli/rjs-component-library-themed-extra with unusual components.  
 
 ## Components
 
 ImageEditor  
 
-## Sources 
+## Sources (Don't use the link bellow. Search by yourself is always a saffer practice!)
+
+[source I](https://www.npmjs.com/package/react-photo-editor) - Base to create photo editor hook
+[source II](https://chatgpt.com/) - Used to implement multiple function in photo editor hook
 
 ## ToDO
 
