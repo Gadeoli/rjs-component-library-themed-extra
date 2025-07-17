@@ -6,10 +6,10 @@
 
 ImageEditor  
 
-## Sources (Don't use the link bellow. Search by yourself is always a saffer practice!)
+## Sources (Don't use the links bellow. Search by yourself is always a saffer practice!)
 
-[source I](https://www.npmjs.com/package/react-photo-editor) - Base to create photo editor hook  
-[source II](https://chatgpt.com/) - Used to implement multiple function in photo editor hook  
+[source I - npm react-photo-editor](https://www.npmjs.com/package/react-photo-editor) - Base to create photo editor hook  
+[source II - ChatGPT](https://chatgpt.com/) - Used to implement multiple function in photo editor hook  
 
 ## ToDO
 
