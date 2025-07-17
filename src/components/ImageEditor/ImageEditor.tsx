@@ -298,7 +298,7 @@ const ActionDrawOptions: FC<{
     return <SubAction>
         <InputColor 
             name="draw-color"
-            onChange={(e: any) => setDrawColor(e.target.value)} 
+            onChange={(e: any) => setDrawColor(e.target.value)}
             value={drawColor} 
             style={{marginRight: '0.25rem'}}
         />

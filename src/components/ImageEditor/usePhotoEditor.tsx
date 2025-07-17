@@ -347,17 +347,35 @@ const usePhotoEditor = ({
                 editorCtx.stroke();
             } else if (drawing.tool === 'arrow') {
                 const [p0, p1] = drawing.points;
-                
-                editorCtx.beginPath();
-                editorCtx.moveTo(p0.x, p0.y);
-                editorCtx.lineTo(p1.x, p1.y);
-                editorCtx.stroke();
 
                 const headSize = 8 + drawing.width * 1.5;
-                const [left, right] = drawArrowHead(p0, p1, headSize);
-                
+
+                // Calculate unit direction vector from p0 to p1
+                const dx = p1.x - p0.x;
+                const dy = p1.y - p0.y;
+                const length = Math.hypot(dx, dy);
+
+                const unitX = dx / length;
+                const unitY = dy / length;
+
+                // Trimmed end of the shaft (p1 shifted back by headSize)
+                const shaftEnd = {
+                x: p1.x - unitX * headSize,
+                y: p1.y - unitY * headSize,
+                };
+
+                // Draw the shaft
                 editorCtx.beginPath();
-                editorCtx.moveTo(p1.x, p1.y);
+                editorCtx.moveTo(p0.x, p0.y);
+                editorCtx.lineTo(shaftEnd.x, shaftEnd.y);
+                editorCtx.stroke();
+
+                // Compute arrowhead based on shaftEnd → p1 direction
+                const [left, right, tip] = drawArrowHead(shaftEnd, p1, headSize, drawing.width);
+
+                // Draw the arrowhead
+                editorCtx.beginPath();
+                editorCtx.moveTo(tip.x, tip.y);
                 editorCtx.lineTo(left.x, left.y);
                 editorCtx.lineTo(right.x, right.y);
                 editorCtx.closePath();

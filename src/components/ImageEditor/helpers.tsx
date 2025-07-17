@@ -55,20 +55,35 @@ export const isInsideWrite = (pos: PointProps, t: TextItemProps, ctx: CanvasRend
     return localX >= 0 && localX <= width && localY >= 0 && localY <= height;
 };
 
-export const drawArrowHead = (p0: PointProps, p1: PointProps, size: number): [PointProps, PointProps] => {
+export const drawArrowHead = (
+    p0: PointProps,
+    p1: PointProps,
+    size: number,
+  strokeWidth: number = 1
+): [PointProps, PointProps, PointProps] => {
     const angle = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+
+    // Ensure arrowhead is wide enough relative to line thickness
+    const headLength = size;
+    const headWidth = Math.max(size * 1.5, strokeWidth * 2.5); // ensures visible triangle
+
     const sin = Math.sin(angle);
     const cos = Math.cos(angle);
+
+    // Arrowhead tip is at p1
+    const tip = { x: p1.x, y: p1.y };
+
     const left = {
-      x: p1.x - size * cos + (size / 2) * sin,
-      y: p1.y - size * sin - (size / 2) * cos,
+        x: p1.x - headLength * cos + (headWidth / 2) * sin,
+        y: p1.y - headLength * sin - (headWidth / 2) * cos,
     };
+
     const right = {
-      x: p1.x - size * cos - (size / 2) * sin,
-      y: p1.y - size * sin + (size / 2) * cos,
+        x: p1.x - headLength * cos - (headWidth / 2) * sin,
+        y: p1.y - headLength * sin + (headWidth / 2) * cos,
     };
-    
-    return [left, right];
+
+    return [left, right, tip];
 };
 
 export const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>, canvasRef: React.RefObject<HTMLCanvasElement | null>): PointProps => {
