@@ -9,10 +9,9 @@ import {
     PointProps,
     UndoRedoItemProps,
     PansItemProps,
-    TextItemProps,
-    FiltersItemProps
+    TextItemProps
 } from "./usePhotoEditor.types";
-import { drawArrowHead, generateCanvasImage, getMetrics, getMousePos, initialCords, isInside } from "./helpers";
+import { drawArrowHead, extractFiltersFromState, generateCanvasImage, getMetrics, getMousePos, initialCords, isInsideWrite } from "./helpers";
 
 const usePhotoEditor = ({
     src,
@@ -54,15 +53,25 @@ const usePhotoEditor = ({
     const editorCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const imgRef = useRef(new Image());
 
+    const isRestoringFiltersRef = useRef<boolean | null>(false); useRef(false);
+    const getFiltersEditorState = () => extractFiltersFromState({
+        ...positions,
+        ...scales,
+        editorOffset: editorOffset
+    })
+
     //state
+    //general
     const [imageSrc, setImageSrc] = useState<string>('');
     const [action, setAction] = useState<ModesType>(actions.mode);
     const [undoStack, setUndoStack] = useState<UndoRedoItemProps[]>([]);
     const [canUndo, setCanUndo] = useState(false);
     const [redoStack, setRedoStack] = useState<UndoRedoItemProps[]>([]);
     const [canRedo, setCanRedo] = useState(false);
+    const [editorOffset, setEditorOffset] = useState<PointProps>(initialCords);
+    const [cursor, setCursor] = useState<string>('default');
     //filters
-    const [filters, setFilters] = useState<FiltersItemProps[]>([]);
+    const [filters, setFilters] = useState<string[]>([]);
     const [brightness, setBrightness] = useState(scales.brightness);
     const [contrast, setContrast] = useState(scales.contrast);
     const [saturate, setSaturate] = useState(scales.saturate);
@@ -71,9 +80,9 @@ const usePhotoEditor = ({
     const [flipVertical, setFlipVertical] = useState(positions.flipVertical);
     const [zoom, setZoom] = useState(positions.zoom);
     const [rotate, setRotate] = useState(positions.rotate);
+    const filtersSnapShot = JSON.stringify(getFiltersEditorState());
     //## handling draw & panning & writting
     //general
-    const [editorOffset, setEditorOffset] = useState<PointProps>(initialCords);
     const [currentPath, setCurrentPath] = useState<PointProps[]>([]);
     //drawing
     const [drawings, setDrawings] = useState<DrawingItemProps[]>([]);
@@ -119,7 +128,9 @@ const usePhotoEditor = ({
         saturate,
         grayscale,
         editorOffset.x,
-        editorOffset.y
+        editorOffset.y,
+
+        pans,
     ]);
 
     // Effect to apply draws whenever relevant state changes.
@@ -131,7 +142,6 @@ const usePhotoEditor = ({
 
         texts,
         drawings,
-        pans,
         
         currentPath,
         selectedIndex,
@@ -148,6 +158,17 @@ const usePhotoEditor = ({
     ]);
 
     useEffect(() => {
+        if (isRestoringFiltersRef.current) return;
+
+        const timeout = setTimeout(() => {
+            //setFilters([...filters, filtersSnapShot]);
+            //pushUndo();
+        }, 200); // Adjust debounce delay as needed
+
+        return () => clearTimeout(timeout);
+    }, [filtersSnapShot]);
+
+    useEffect(() => {
         const newFont = `${actions.writeSettings.fontSize}px ${actions.writeSettings.font}`;
         setWriteFont(newFont);
     }, [writeFont, writeFontSize]);
@@ -159,6 +180,47 @@ const usePhotoEditor = ({
     useEffect(() => {
         setCanUndo(undoStack.length === 0);
     }, [undoStack.length]);
+
+    useEffect(() => {
+        let c = '';
+
+        if(action === 'draw'){
+            c =  'crosshair';
+        }else if(action === 'pan'){
+            c = 'grab';
+        }else{
+            c = 'default';
+        }
+
+        setCursor(c);
+    }, [action]);
+
+    const restoreFiltersEditorState = (state:any) => {
+        isRestoringFiltersRef.current = true;
+
+        try {
+            const stackedFilterState = JSON.parse(state);
+
+            setBrightness(stackedFilterState.brightness);
+            setContrast(stackedFilterState.contrast);
+            setGrayscale(stackedFilterState.grayscale);
+            setSaturate(stackedFilterState.saturate);
+            setRotate(stackedFilterState.rotate);
+            setFlipHorizontal(stackedFilterState.flipHorizontal);
+            setFlipVertical(stackedFilterState.flipVertical);
+            setZoom(stackedFilterState.zoom);
+            setEditorOffset(stackedFilterState.offset);
+        } catch (error) {
+            console.log({
+                error,
+                state
+            });
+        }
+
+        requestAnimationFrame(() => {
+            isRestoringFiltersRef.current = false;
+        });
+    };
 
     /**
      * Applies the selected filters and transformations to image canvas.
@@ -187,7 +249,6 @@ const usePhotoEditor = ({
                 // Set canvas dimensions to match the image.
                 imageCanvas.width = imgElement.width;
                 imageCanvas.height = imgElement.height;
-
                 //Set the editor canvas dimensions to match the image
                 editorCanvas.width = imgElement.width;
                 editorCanvas.height = imgElement.height;
@@ -452,17 +513,40 @@ const usePhotoEditor = ({
     // EDITOR HANDLES
     const pushUndo = () => {
         setUndoStack((prev) => [
-        ...prev,
-        {
-            filters: JSON.parse(JSON.stringify(filters)),
-            texts: JSON.parse(JSON.stringify(texts)),
-            drawings: JSON.parse(JSON.stringify(drawings)),
-            pans: JSON.parse(JSON.stringify(pans)),
-        },
+            ...prev,
+            {
+                filters: JSON.parse(JSON.stringify(filters)),
+                texts: JSON.parse(JSON.stringify(texts)),
+                drawings: JSON.parse(JSON.stringify(drawings)),
+                pans: JSON.parse(JSON.stringify(pans)),
+            },
         ]);
         setRedoStack([]); // clear redo on new action
     };
 
+    const handlePansChange = ({handledPans, type} : {handledPans: any[], type: 'undo' | 'redo'}) => {     
+        if(handledPans.length){
+            const ps = handledPans[handledPans.length - 1]?.points;
+
+            if (ps && ps.length >= 2) {
+                const deltaX = ps[ps.length - 1].x - ps[1].x;
+                const deltaY = ps[ps.length - 1].y - ps[1].y;                
+
+                if(type === 'undo'){
+                    setEditorOffset({
+                        x: editorOffset.x - deltaX,
+                        y: editorOffset.y - deltaY
+                    });
+                }else{
+                    setEditorOffset({
+                        x: editorOffset.x + deltaX,
+                        y: editorOffset.y + deltaY
+                    });
+                }                
+            }
+        }
+    }
+ 
     const handleUndo = () => {
         if (!undoStack.length) return;
 
@@ -480,18 +564,26 @@ const usePhotoEditor = ({
             },
         ]);
 
+        handlePansChange({handledPans: pans, type: 'undo'});
+
+        if(prev.filters.length){
+            restoreFiltersEditorState(prev.filters[prev.filters.length - 1]);
+        }
+
         setTexts(prev.texts);
         setDrawings(prev.drawings);
         setPans(prev.pans);
-        setFilters(prev.filters);
+        setFilters(prev.filters),
         setSelectedIndex(null);
     };
 
     const handleRedo = () => {
         if (!redoStack.length) return;
-            const next = redoStack[redoStack.length - 1];
-            setRedoStack((stack) => stack.slice(0, -1));
-            setUndoStack((undo) => [
+
+        const next = redoStack[redoStack.length - 1];
+
+        setRedoStack((stack) => stack.slice(0, -1));
+        setUndoStack((undo) => [
             ...undo,
             {
                 filters: JSON.parse(JSON.stringify(filters)),
@@ -501,10 +593,16 @@ const usePhotoEditor = ({
             },
         ]);
 
+        handlePansChange({handledPans: next.pans, type: 'redo'});
+
+        if(next.filters.length){
+            restoreFiltersEditorState(next.filters[next.filters.length - 1]);
+        }
+
         setTexts(next.texts);
         setDrawings(next.drawings);
         setPans(next.pans);
-        setFilters(next.filters);
+        setFilters(next.filters)
         setSelectedIndex(null);
     };
 
@@ -518,7 +616,7 @@ const usePhotoEditor = ({
         if(!editorCanvas || !editorCtx || action !== 'write') return; 
         
         const pos = getMousePos(e, editorCanvasRef);
-        const idx = texts.findIndex((t) => isInside(pos, t, editorCtx));
+        const idx = texts.findIndex((t) => isInsideWrite(pos, t, editorCtx));
 
         if (idx !== -1) {
             const t = texts[idx];
@@ -621,7 +719,7 @@ const usePhotoEditor = ({
         }else if (selectedIndex !== null) {
             const t = texts[selectedIndex];
             
-            if (isInside(pos, t, editorCtx)) {
+            if (isInsideWrite(pos, t, editorCtx)) {
                 pushUndo();
                 setIsDragging(true);
                 const dragPos = { x: pos.x - t.x, y: pos.y - t.y }
@@ -678,8 +776,14 @@ const usePhotoEditor = ({
     const handlePointerUp = () => {
         setIsDragging(false);
         setIsDrawing(false);
-        if (action === 'draw' || action === 'pan') finalizeDrawing();
+
+        if (action === 'draw') finalizeDrawing();
+        if (action === 'pan') finalizePanning();
     };
+
+    const handlePointerOut = () => {
+        handlePointerUp();
+    }
 
     /**
      * Handles the wheel event for zooming in and out.
@@ -732,6 +836,18 @@ const usePhotoEditor = ({
         setCurrentPath([]);
     };
 
+    const finalizePanning = () => {
+        if (!isDragging) return;
+
+        setPans((prev) => [
+            ...prev,
+            { points: currentPath }
+        ]);
+
+        setIsDragging(false);
+        setCurrentPath([]);
+    }
+
     /**
      * Resets the filters and styles to its original state with the default settings.
      */
@@ -747,13 +863,16 @@ const usePhotoEditor = ({
 
         setEditorOffset(initialCords);
         setIsDragging(false);
+        setIsDrawing(false);
         setAction('draw');
+        setUndoStack([]);
+        setRedoStack([]);
 
         setDrawTool('pen');
         setDrawings([]);
         setTexts([]);
         setPans([]);
-        setTexts([]);
+        setFilters([]);
     };
 
     // Expose the necessary state and handlers for external use.
@@ -771,6 +890,8 @@ const usePhotoEditor = ({
         canUndo,
         /** Map if there are action to redo */
         canRedo,
+        /** Current recommended cursor based in action */
+        cursor,
 
         //FILTERS
         /** Array to applyed filters */
@@ -883,6 +1004,8 @@ const usePhotoEditor = ({
         handlePointerMove,
         /** Function to handle canvas pointer up. */
         handlePointerUp,
+        /** Function to handle canvas pointer out. */
+        handlePointerOut,
         /** Function to handle canvas wheel. */
         handleWheel,
         /** Function to handle zoom in. */

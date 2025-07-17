@@ -56,16 +56,11 @@ export interface TextItemProps {
 };
 
 export interface PansItemProps {
-    x: number;
-    y: number;
-};
-
-export interface FiltersItemProps {
-    
+    points: PointProps[];
 };
 
 export interface UndoRedoItemProps {
-    filters: FiltersItemProps[];
+    filters: string[];
     texts: TextItemProps[];
     drawings: DrawingItemProps[];
     pans: PansItemProps[];

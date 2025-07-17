@@ -56,6 +56,9 @@ const ImageEditor: FC<DefaultProps> = ({
         editorCanvasRef,
         imageSrc,
         action,
+        cursor,
+        canRedo,
+        canUndo,
 
         //Filters
         brightness,
@@ -82,6 +85,7 @@ const ImageEditor: FC<DefaultProps> = ({
         //Handlers
         handlePointerDown,
         handlePointerUp,
+        handlePointerOut,
         handlePointerMove,
         handleWheel,
         handleRedo,
@@ -146,7 +150,7 @@ const ImageEditor: FC<DefaultProps> = ({
     }, []);
 
     useEffect(() => {
-        console.log(usePhotoEditorProps);
+        // console.log(usePhotoEditorProps);
     }, [usePhotoEditorProps.drawTool]);
 
     return (<Container type='clean' className={classNames} style={style}>
@@ -156,7 +160,11 @@ const ImageEditor: FC<DefaultProps> = ({
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
+                onPointerOut={handlePointerOut}
                 onWheel={handleWheel}
+                style={{
+                    cursor: cursor
+                }}
             />
             <Canvas
                 ref={editorCanvasRef}
@@ -225,20 +233,20 @@ const ImageEditor: FC<DefaultProps> = ({
             </Action>
 
             <Action>
-                <Button onClick={() => {
+                <Button disabled={canUndo} onClick={() => {
                     handleUndo();
                     setShowSubActions(false);
                 }}>
-                    &#8635;
+                    &#8630;
                 </Button>
             </Action>
 
             <Action>
-                <Button onClick={() => {
+                <Button disabled={canRedo} onClick={() => {
                     handleRedo();
                     setShowSubActions(false);
                 }}>
-                    &#8635;
+                    &#8631;
                 </Button>
             </Action>              
             

@@ -38,7 +38,7 @@ export const getMetrics = (t: TextItemProps, ctx: CanvasRenderingContext2D) => {
     return { lines, width, height, lineHeight };
 };
 
-export const isInside = (pos: PointProps, t: TextItemProps, ctx: CanvasRenderingContext2D) => {
+export const isInsideWrite = (pos: PointProps, t: TextItemProps, ctx: CanvasRenderingContext2D) => {
     if (!ctx) return false;
     
     const { width, height } = getMetrics(t, ctx);
@@ -145,4 +145,18 @@ export const labels : TranslationsProps = {
     vertical: {txt: 'Vertically'},
     zoom: {txt: 'Zoom'},
     write: {txt: 'Write'},
+}
+
+export const extractFiltersFromState = (state: any) => {
+    return {
+        brightness: state?.brightness,
+        contrast: state?.contrast,
+        grayscale: state?.grayscale,
+        saturate: state?.saturate,
+        rotate: state?.rotate,
+        flipHorizontal: state?.flipHorizontal,
+        flipVertical: state?.flipVertical,
+        zoom: state?.zoom,
+        offset: state?.editorOffset,
+    }
 }
