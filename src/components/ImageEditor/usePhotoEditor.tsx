@@ -1,5 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { UseImageEditorProps } from "./ImageEditor.types";
+import { 
+    DefaultProps,
+
+    ModesType,
+    DrawToolsType,
+    
+    DrawingItemProps,
+    PointProps,
+    UndoRedoItemProps,
+    PansItemProps,
+    TextItemProps,
+    FiltersItemProps
+} from "./usePhotoEditor.types";
+import { drawArrowHead, generateCanvasImage, getMetrics, getMousePos, initialCords, isInside } from "./helpers";
 
 const usePhotoEditor = ({
     src,
@@ -17,31 +30,39 @@ const usePhotoEditor = ({
     },
     actions = {
         mode: 'draw',
-        line: {
-            color: '#000000',
-            width: 12,
-            style: 'hand-free'
+        drawSettings: {
+            tool: 'pen',
+            color: "#000000",
+            size: 2
         },
-        text: {
-            color: "#FFEF00",
-            font: 'Times New Roman',
-            fontSize: 12
+        writeSettings: {
+            text: '',
+            font: 'Arial',
+            fontSize: 20,
+            color: '#000000',
+            x: 0,
+            y: 0,
+            rotation: 0,
+            scale: 1
         }
+    },
+    labels = {
+        writeInitial: 'New Text...'
     }
-}: UseImageEditorProps) => {
+}: DefaultProps) => {
     const imageCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const editorCanvasRef = useRef<HTMLCanvasElement | null>(null);
-
     const imgRef = useRef(new Image());
-    const drawingPathsRef = useRef<
-        { path: { x: number; y: number }[]; color: string; width: number }[]
-    >([]);
 
     //state
     const [imageSrc, setImageSrc] = useState<string>('');
-    const [action, setAction] = useState<'draw' | 'pan' | 'flip' | 'write'>(actions.mode);
-    const [history, setHistory] = useState();
+    const [action, setAction] = useState<ModesType>(actions.mode);
+    const [undoStack, setUndoStack] = useState<UndoRedoItemProps[]>([]);
+    const [canUndo, setCanUndo] = useState(false);
+    const [redoStack, setRedoStack] = useState<UndoRedoItemProps[]>([]);
+    const [canRedo, setCanRedo] = useState(false);
     //filters
+    const [filters, setFilters] = useState<FiltersItemProps[]>([]);
     const [brightness, setBrightness] = useState(scales.brightness);
     const [contrast, setContrast] = useState(scales.contrast);
     const [saturate, setSaturate] = useState(scales.saturate);
@@ -50,20 +71,31 @@ const usePhotoEditor = ({
     const [flipVertical, setFlipVertical] = useState(positions.flipVertical);
     const [zoom, setZoom] = useState(positions.zoom);
     const [rotate, setRotate] = useState(positions.rotate);
-    //## handling drag-and-drop panning.
+    //## handling draw & panning & writting
+    //general
+    const [editorOffset, setEditorOffset] = useState<PointProps>(initialCords);
+    const [currentPath, setCurrentPath] = useState<PointProps[]>([]);
+    //drawing
+    const [drawings, setDrawings] = useState<DrawingItemProps[]>([]);
+    const [isDrawing, setIsDrawing] = useState(false);
+    const [drawTool, setDrawTool] = useState<DrawToolsType>(actions.drawSettings.tool);
+    const [drawColor, setDrawColor] = useState(actions.drawSettings.color);
+    const [brushSize, setBrushSize] = useState(actions.drawSettings.size);
+    //drag
+    const [pans, setPans] = useState<PansItemProps[]>([]);
     const [isDragging, setIsDragging] = useState(false);
-    const [panStart, setPanStart] = useState<{ x: number; y: number } | null>(null);
-    const [offsetX, setOffsetX] = useState(0);
-    const [offsetY, setOffsetY] = useState(0);
-    const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
-    //## drawing on the canvas.
-    const [lineColor, setLineColor] = useState<string>(actions.line.color);
-    const [lineWidth, setLineWidth] = useState<number>(actions.line.width);
-    const [lineStyle, setLineStyle] = useState<'hand-free' | 'straight'>(actions.line.style);
-    //## write on the canvas.
-    const [textColor, setTextColor] = useState<string>(actions.text.color);
-    const [textFont, setTextFont] = useState<string>(actions.text.font);
-    const [textFontSize, setTextFontSize] = useState<number>(actions.text.fontSize);
+    const [dragOffset, setDragOffset] = useState<PointProps>(initialCords);
+    // write
+    const [texts, setTexts] = useState<TextItemProps[]>([]);
+    const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+    const [writeEditorPos, setWriteEditorPos] = useState<PointProps>(initialCords);
+    const [writeText, setWriteText] = useState(actions.writeSettings.text);
+    const [writeFontFamily, setWriteFontFamily] = useState<string>(actions.writeSettings.font);
+    const [writeFontSize, setWriteFontSize] = useState<number>(actions.writeSettings.fontSize);
+    const [writeFont, setWriteFont] = useState<string>(`${actions.writeSettings.fontSize}px ${actions.writeSettings.font}`);
+    const [writeColor, setWriteColor] = useState(actions.writeSettings.color);
+    const [writeRotation, setWriteRotation] = useState(actions.writeSettings.rotation);
+    const [writeScale, setWriteScale] = useState(actions.writeSettings.scale);
     //State - end    
 
     // Effect to update the image source when the src changes.
@@ -74,7 +106,7 @@ const usePhotoEditor = ({
 
     // Effect to apply transformations and filters whenever relevant state changes.
     useEffect(() => {
-        applyFilter();
+        applyFilters();
     }, [
         src,
         imageSrc,
@@ -86,33 +118,53 @@ const usePhotoEditor = ({
         contrast,
         saturate,
         grayscale,
-        offsetX,
-        offsetY,
+        editorOffset.x,
+        editorOffset.y
     ]);
 
-    const redrawDrawingPaths = (context: CanvasRenderingContext2D) => {
-        drawingPathsRef.current.forEach(({ path, color, width }) => {
-            context.beginPath();
-            context.strokeStyle = color;
-            context.lineWidth = width;
-            context.lineCap = 'round';
-            context.lineJoin = 'round';
+    // Effect to apply draws whenever relevant state changes.
+    useEffect(() => {
+        applyDraws();
+    }, [
+        src,
+        imageSrc,
 
-            path.forEach((point, index) => {
-                if (index === 0) {
-                    context.moveTo(point.x, point.y);
-                } else {
-                    context.lineTo(point.x, point.y);
-                }
-            });
-            context.stroke();
-        });
-    };
+        texts,
+        drawings,
+        pans,
+        
+        currentPath,
+        selectedIndex,
+        
+        brushSize,
+        drawColor,
+        drawTool,
+        isDrawing,
+        
+        editorOffset.x,
+        editorOffset.y,
+        dragOffset.x,
+        dragOffset.y,
+    ]);
+
+    useEffect(() => {
+        const newFont = `${actions.writeSettings.fontSize}px ${actions.writeSettings.font}`;
+        setWriteFont(newFont);
+    }, [writeFont, writeFontSize]);
+
+    useEffect(() => {
+        setCanRedo(redoStack.length === 0);
+    }, [redoStack.length]);
+
+    useEffect(() => {
+        setCanUndo(undoStack.length === 0);
+    }, [undoStack.length]);
 
     /**
-     * Applies the selected filters and transformations to the image on the canvas.
+     * Applies the selected filters and transformations to image canvas.
+     * And Set size and offset for both canvas
      */
-    const applyFilter = () => {
+    const applyFilters = () => {
         if (!imageSrc) return;
 
         const imageCanvas = imageCanvasRef.current;
@@ -123,7 +175,7 @@ const usePhotoEditor = ({
 
         const imgElement = imgRef.current;
         imgRef.current.src = imageSrc;
-        imgRef.current.onload = applyFilter;
+        imgRef.current.onload = applyFilters;
 
         imgElement.onload = () => {
             if (imageCanvas && imageCtx && editorCanvas && editorCtx) {
@@ -177,19 +229,170 @@ const usePhotoEditor = ({
                     editorCtx.scale(1, -1);
                 }
 
-                imageCtx.translate(translateX + offsetX, translateY + offsetY);
+                imageCtx.translate(translateX + editorOffset.x, translateY + editorOffset.y);
                 imageCtx.scale(zoom, zoom);
                 imageCtx.drawImage(imgElement, 0, 0, imageCanvas.width, imageCanvas.height);
                 imageCtx.restore();
                 imageCtx.filter = 'none';
 
-                editorCtx.translate(translateX + offsetX, translateY + offsetY);
+                editorCtx.translate(translateX + editorOffset.x, translateY + editorOffset.y);
                 editorCtx.scale(zoom, zoom);
                 imageCtx.restore();
                 imageCtx.filter = 'none';
-                redrawDrawingPaths(editorCtx);
+                
+                // Old Code - This is needed now ??call applyDraws is equal??
+                // redrawDrawingPaths(editorCtx);
             }
         };
+    };
+
+    const applyDraws = () => {
+        const editorCanvas = editorCanvasRef.current;
+        const editorCtx = editorCanvas?.getContext('2d');
+
+        if(!editorCanvas || !editorCtx) return;
+
+        editorCtx.clearRect(0, 0, editorCanvas.width, editorCanvas.height);
+
+        // Render drawings
+        drawings.forEach((drawing) => {
+            editorCtx.save();
+            editorCtx.lineCap = 'round';
+            editorCtx.lineJoin = 'round';
+            editorCtx.lineWidth = drawing.width;
+            
+            if (drawing.erase) {
+                editorCtx.globalCompositeOperation = 'destination-out';
+                editorCtx.strokeStyle = 'rgba(0,0,0,1)';
+            } else {
+                editorCtx.globalCompositeOperation = 'source-over';
+                editorCtx.strokeStyle = drawing.color || 'black';
+            }
+
+            if (drawing.tool === 'line') {
+                const [p0, p1] = drawing.points;
+                
+                editorCtx.beginPath();
+                editorCtx.moveTo(p0.x, p0.y);
+                editorCtx.lineTo(p1.x, p1.y);
+                editorCtx.stroke();
+            } else if (drawing.tool === 'circle') {
+                const [center, edge] = drawing.points;
+                const radius = Math.hypot(edge.x - center.x, edge.y - center.y);
+                
+                editorCtx.beginPath();
+                editorCtx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+                editorCtx.stroke();
+            } else if (drawing.tool === 'arrow') {
+                const [p0, p1] = drawing.points;
+                
+                editorCtx.beginPath();
+                editorCtx.moveTo(p0.x, p0.y);
+                editorCtx.lineTo(p1.x, p1.y);
+                editorCtx.stroke();
+
+                const headSize = 8 + drawing.width * 1.5;
+                const [left, right] = drawArrowHead(p0, p1, headSize);
+                
+                editorCtx.beginPath();
+                editorCtx.moveTo(p1.x, p1.y);
+                editorCtx.lineTo(left.x, left.y);
+                editorCtx.lineTo(right.x, right.y);
+                editorCtx.closePath();
+                editorCtx.fillStyle = drawing.color || 'black';
+                editorCtx.fill();
+            } else {
+                // pen / eraser path
+                if (drawing.points.length < 2) return;
+                
+                editorCtx.beginPath();
+                editorCtx.moveTo(drawing.points[0].x, drawing.points[0].y);
+                
+                drawing.points.forEach((pt) => editorCtx.lineTo(pt.x, pt.y));
+                
+                editorCtx.stroke();
+            }
+
+            editorCtx.restore();
+        });
+
+        // Preview current in-progress drawing
+        if (isDrawing && currentPath.length) {
+            editorCtx.save();
+            editorCtx.lineCap = 'round';
+            editorCtx.lineJoin = 'round';
+            editorCtx.lineWidth = brushSize;
+
+            if (drawTool === 'eraser') {
+                editorCtx.globalCompositeOperation = 'destination-out';
+                editorCtx.strokeStyle = 'rgba(0,0,0,1)';
+            } else {
+                editorCtx.globalCompositeOperation = 'source-over';
+                editorCtx.strokeStyle = drawColor;
+            }
+
+            if (drawTool === 'line' && currentPath.length === 2) {
+                const [p0, p1] = currentPath;
+
+                editorCtx.beginPath();
+                editorCtx.moveTo(p0.x, p0.y);
+                editorCtx.lineTo(p1.x, p1.y);
+                editorCtx.stroke();
+            } else if (drawTool === 'circle' && currentPath.length === 2) {
+                const [center, edge] = currentPath;
+                const radius = Math.hypot(edge.x - center.x, edge.y - center.y);
+
+                editorCtx.beginPath();
+                editorCtx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+                editorCtx.stroke();
+            } else if (drawTool === 'arrow' && currentPath.length === 2) {
+                const [p0, p1] = currentPath;
+
+                editorCtx.beginPath();
+                editorCtx.moveTo(p0.x, p0.y);
+                editorCtx.lineTo(p1.x, p1.y);
+                editorCtx.stroke();
+
+                const headSize = 8 + brushSize * 1.5;
+                const [left, right] = drawArrowHead(p0, p1, headSize);
+
+                editorCtx.beginPath();
+                editorCtx.moveTo(p1.x, p1.y);
+                editorCtx.lineTo(left.x, left.y);
+                editorCtx.lineTo(right.x, right.y);
+                editorCtx.closePath();
+                editorCtx.fillStyle = drawColor;
+                editorCtx.fill();
+            } else if (drawTool === 'pen') {
+                editorCtx.beginPath();
+                editorCtx.moveTo(currentPath[0].x, currentPath[0].y);
+                currentPath.forEach((pt) => editorCtx.lineTo(pt.x, pt.y));
+                editorCtx.stroke();
+            }
+
+            editorCtx.restore();
+        }
+
+        // Render texts
+        texts.forEach((t, i) => {
+            const { lines, width, height, lineHeight } = getMetrics(t, editorCtx);
+
+            editorCtx.save();
+            editorCtx.translate(t.x, t.y);
+            editorCtx.rotate((t.rotation * Math.PI) / 180);
+            editorCtx.scale(t.scale, t.scale);
+            editorCtx.font = t.font;
+            editorCtx.fillStyle = t.color;
+            lines.forEach((ln, idx) => editorCtx.fillText(ln, 0, idx * lineHeight));
+
+            if (i === selectedIndex) {
+                editorCtx.strokeStyle = 'red';
+                editorCtx.strokeRect(0, 0, width, height);
+            }
+
+            editorCtx.restore();
+
+        }); 
     };
 
     /**
@@ -197,45 +400,28 @@ const usePhotoEditor = ({
      * @returns {Promise<string | null>} A promise that resolves with the edited image src or null if the canvas is not available.
      */
     const generateEditedImage = (): Promise<string | null> => {
-        return new Promise((resolve) => {
-            const imageCanvas = imageCanvasRef.current;
-            const editorCanvas = editorCanvasRef.current;
+        const imageCanvas = imageCanvasRef.current;
+        const editorCanvas = editorCanvasRef.current;
 
-            if(!imageCanvas){
+        if(!imageCanvas || !editorCanvas){
+            return new Promise((resolve) => {
                 resolve(null);
                 return;
-            };
-
-            const layersCanvas = [
-                imageCanvas, //let in first position
-                editorCanvas
-            ];
-
-            const mergedCanvas = document.createElement('canvas');
-            mergedCanvas.width = imageCanvas.width;
-            mergedCanvas.height = imageCanvas.height;
-            const mergedCtx = mergedCanvas.getContext('2d');
-
-            let cnvCounter = 0;
-
-            layersCanvas.forEach((cnv) => {
-                if(cnv){
-                    const dataURL = cnv.toDataURL();
-                    const image = new Image();
-
-                    image.onload = () => {
-                        mergedCtx?.drawImage(image, 0, 0);
-                        cnvCounter++;
-
-                        if(cnvCounter === layersCanvas.length){
-                            resolve(mergedCanvas.toDataURL('image/png'));
-                        }
-                    }
-
-                    image.src = dataURL;
-                }
             })
-        });
+        };
+
+        const layersCanvas = [
+            imageCanvas, //let in first position
+            editorCanvas
+        ];
+
+        return generateCanvasImage(
+            layersCanvas,
+            {
+                height: imageCanvas.height,
+                width: imageCanvas.width
+            }
+        );
     };
 
     /**
@@ -247,6 +433,7 @@ const usePhotoEditor = ({
         return `brightness(${brightness}%) contrast(${contrast}%) grayscale(${grayscale}%) saturate(${saturate}%)`;
     };
 
+    // IMAGE HANDLES
     /**
      * Handles the zoom-in action.
      */
@@ -261,32 +448,184 @@ const usePhotoEditor = ({
         setZoom((prevZoom) => Math.max(prevZoom - 0.1, 0.1));
     };
 
+    // EDITOR HANDLES
+    const pushUndo = () => {
+        setUndoStack((prev) => [
+        ...prev,
+        {
+            filters: JSON.parse(JSON.stringify(filters)),
+            texts: JSON.parse(JSON.stringify(texts)),
+            drawings: JSON.parse(JSON.stringify(drawings)),
+            pans: JSON.parse(JSON.stringify(pans)),
+        },
+        ]);
+        setRedoStack([]); // clear redo on new action
+    };
+
+    const handleUndo = () => {
+        if (!undoStack.length) return;
+
+        const prev = undoStack[undoStack.length - 1];
+
+        setUndoStack((stack) => stack.slice(0, -1));
+        
+        setRedoStack((redo) => [
+            ...redo,
+            {
+                filters: JSON.parse(JSON.stringify(filters)),
+                texts: JSON.parse(JSON.stringify(texts)),
+                drawings: JSON.parse(JSON.stringify(drawings)),
+                pans: JSON.parse(JSON.stringify(pans)),
+            },
+        ]);
+
+        setTexts(prev.texts);
+        setDrawings(prev.drawings);
+        setPans(prev.pans);
+        setFilters(prev.filters);
+        setSelectedIndex(null);
+    };
+
+    const handleRedo = () => {
+        if (!redoStack.length) return;
+            const next = redoStack[redoStack.length - 1];
+            setRedoStack((stack) => stack.slice(0, -1));
+            setUndoStack((undo) => [
+            ...undo,
+            {
+                filters: JSON.parse(JSON.stringify(filters)),
+                texts: JSON.parse(JSON.stringify(texts)),
+                drawings: JSON.parse(JSON.stringify(drawings)),
+                pans: JSON.parse(JSON.stringify(pans)),
+            },
+        ]);
+
+        setTexts(next.texts);
+        setDrawings(next.drawings);
+        setPans(next.pans);
+        setFilters(next.filters);
+        setSelectedIndex(null);
+    };
+
+    /**
+     * Handles the canvas image click and handle tools in canvas editor.
+     */
+    const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        const editorCanvas = editorCanvasRef.current;
+        const editorCtx = editorCanvas?.getContext('2d');
+
+        if(!editorCanvas || !editorCtx || action !== 'write') return; 
+        
+        const pos = getMousePos(e, editorCtx);
+        const idx = texts.findIndex((t) => isInside(pos, t, editorCtx));
+
+        if (idx !== -1) {
+            const t = texts[idx];
+            
+            setSelectedIndex(idx);
+            setWriteText(t.text);
+            setWriteFont(t.font);
+            setWriteColor(t.color);
+            setWriteRotation(t.rotation);
+            setWriteScale(t.scale);
+            setWriteEditorPos({ x: pos.x, y: pos.y});
+        } else {
+            setSelectedIndex(null);
+        }
+    };
+
+    /**
+     * Handles the canvas image double click and handle tools in canvas editor.
+     */
+    const handleDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        const editorCanvas = editorCanvasRef.current;
+        const editorCtx = editorCanvas?.getContext('2d');
+
+        if(!editorCanvas || !editorCtx || action !== 'write') return; 
+
+        pushUndo();
+
+        const pos = getMousePos(e, editorCtx);
+        const newText: TextItemProps = {
+          text: labels.writeInitial,
+          x: pos.x,
+          y: pos.y,
+          font: writeFont,
+          fontSize: writeFontSize,
+          color: writeColor,
+          rotation: 0,
+          scale: 1,
+        };
+        
+        setTexts((prev) => [...prev, newText]);
+        setWriteText(labels.writeInitial);
+        setWriteRotation(0);
+        setWriteScale(1);
+        setWriteEditorPos({ x: pos.x + 10, y: pos.y + 10 });
+        setSelectedIndex(texts.length);
+    };
+
+    const updateText = () => {
+        if(selectedIndex === null) return;
+
+        pushUndo();
+
+        setTexts((prev) => {
+            const updated = [...prev];
+
+            updated[selectedIndex] = {
+                ...updated[selectedIndex],
+                text: writeText,
+                font: writeFont,
+                color: writeColor,
+                rotation: writeRotation,
+                scale: writeScale,
+            };
+        
+            return updated;
+        });
+    }
+
+    //Both Handles
     /**
      * Handles the pointer down event for initiating drawing or drag-and-drop panning.
      */
     const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+        const editorCanvas = editorCanvasRef.current;
+        const editorCtx = editorCanvas?.getContext('2d');
+
+        if(!editorCanvas || !editorCtx) return; 
+
+        const pos = getMousePos(event, editorCtx);
+
         if (action === 'draw') {
-            const canvas = editorCanvasRef.current;
-            
-            if (!canvas) return;
+            pushUndo();
+            setIsDrawing(true);
 
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            const x = (event.clientX - rect.left) * scaleX;
-            const y = (event.clientY - rect.top) * scaleY;
-            
-            setDrawStart({ x, y });
-
-            drawingPathsRef.current.push({ path: [{ x, y }], color: lineColor, width: lineWidth });
-        } else if (action === 'pan') {
+            if (drawTool === 'line' || drawTool === 'arrow' || drawTool === 'circle') {
+                setCurrentPath([pos]); // start point
+            } else {
+                setCurrentPath([pos]);
+            }
+        }else if (action === 'pan') {
             setIsDragging(true);
             
-            const initialX = event.clientX - (flipHorizontal ? -offsetX : offsetX);
-            const initialY = event.clientY - (flipVertical ? -offsetY : offsetY);
+            const initialX = event.clientX - (flipHorizontal ? -editorOffset.x : editorOffset.x);
+            const initialY = event.clientY - (flipVertical ? -editorOffset.y : editorOffset.y);
             
-            setPanStart({ x: initialX, y: initialY });
-        } else {
+            const pos = { x: initialX, y: initialY }
+
+            setCurrentPath([pos]);
+        }else if (selectedIndex !== null) {
+            const t = texts[selectedIndex];
+            
+            if (isInside(pos, t, editorCtx)) {
+                pushUndo();
+                setIsDragging(true);
+                const dragPos = { x: pos.x - t.x, y: pos.y - t.y }
+                setDragOffset(dragPos);
+            }
+        }else {
             //nothing
         }
     };
@@ -295,44 +634,39 @@ const usePhotoEditor = ({
      * Handles the pointer move event for updating the drawing path or panning the image.
      */
     const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
-        if (action === 'draw' && drawStart) {
-            const canvas = editorCanvasRef.current;
-            const context = canvas?.getContext('2d');
-            const rect = canvas?.getBoundingClientRect();
+        const editorCanvas = editorCanvasRef.current;
+        const editorCtx = editorCanvas?.getContext('2d');
 
-            if (!canvas || !context || !rect) return;
+        if(!editorCanvas || !editorCtx) return; 
 
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            const x = (event.clientX - rect.left) * scaleX;
-            const y = (event.clientY - rect.top) * scaleY;
-            const currentPath = drawingPathsRef.current[drawingPathsRef.current.length - 1].path;
+        const pos = getMousePos(event, editorCtx);
 
-            context.strokeStyle = lineColor;
-            context.lineWidth = lineWidth;
-            context.lineCap = 'round';
-            context.lineJoin = 'round';
-
-            context.beginPath();
-            context.moveTo(drawStart.x, drawStart.y);
-            context.lineTo(x, y);
-            context.stroke();
-
-            setDrawStart({ x, y });
-            
-            currentPath.push({ x, y });
-
-            return;
-        }
-
-        if (isDragging && panStart) {
+        if (action === 'draw' && isDrawing) {
+            if (drawTool === 'line' || drawTool === 'arrow' || drawTool === 'circle') {
+                setCurrentPath((prev) => (prev.length === 1 ? [prev[0], pos] : [prev[0], pos]));
+            } else {
+                setCurrentPath((prev) => [...prev, pos]);
+            }
+        } else if (action === 'pan' && isDragging) {
             event.preventDefault();
 
-            const offsetXDelta = event.clientX - panStart.x;
-            const offsetYDelta = event.clientY - panStart.y;
+            const offsetXDelta = event.clientX - currentPath[0].x;
+            const offsetYDelta = event.clientY - currentPath[0].y;
 
-            setOffsetX(flipHorizontal ? -offsetXDelta : offsetXDelta);
-            setOffsetY(flipVertical ? -offsetYDelta : offsetYDelta);
+            const newPos = {
+                x: flipHorizontal ? -offsetXDelta : offsetXDelta,
+                y: flipVertical ? -offsetYDelta : offsetYDelta
+            };
+
+            setCurrentPath((prev) => [...prev, newPos]);
+            setEditorOffset(newPos);
+        }else if (isDragging && selectedIndex !== null) {
+            setTexts((prev) => {
+                const up = [...prev];
+                up[selectedIndex] = { ...up[selectedIndex], x: pos.x - dragOffset.x, y: pos.y - dragOffset.y };
+                return up;
+            });
+            setWriteEditorPos({ x: pos.x + 10, y: pos.y + 10 });
         }
     };
 
@@ -341,7 +675,8 @@ const usePhotoEditor = ({
      */
     const handlePointerUp = () => {
         setIsDragging(false);
-        setDrawStart(null);
+        setIsDrawing(false);
+        if (action === 'draw' || action === 'pan') finalizeDrawing();
     };
 
     /**
@@ -357,6 +692,44 @@ const usePhotoEditor = ({
         }
     };
 
+    const finalizeDrawing = () => {
+        if (!isDrawing) return;
+        
+        if (drawTool === 'line' && currentPath.length === 2) {
+            setDrawings((prev) => [
+                ...prev,
+                { tool: 'line', points: currentPath, color: drawColor, width: brushSize },
+            ]);
+        } else if (drawTool === 'circle' && currentPath.length === 2) {
+            setDrawings((prev) => [
+                ...prev,
+                { tool: 'circle', points: currentPath, color: drawColor, width: brushSize },
+            ]);
+        } else if (drawTool === 'arrow' && currentPath.length === 2) {
+            setDrawings((prev) => [
+                ...prev,
+                { tool: 'arrow', points: currentPath, color: drawColor, width: brushSize },
+            ]);
+        } else if (drawTool === 'eraser') {
+            if (currentPath.length > 1){
+                setDrawings((prev) => [
+                    ...prev,
+                    { tool: 'eraser', points: currentPath, width: brushSize, erase: true },
+                ]);
+            }
+        } else if (drawTool === 'pen') {
+            if (currentPath.length > 1){
+                setDrawings((prev) => [
+                    ...prev,
+                    { tool: 'pen', points: currentPath, color: drawColor, width: brushSize },
+                ]);
+            }
+        }
+
+        setIsDrawing(false);
+        setCurrentPath([]);
+    };
+
     /**
      * Resets the filters and styles to its original state with the default settings.
      */
@@ -369,29 +742,32 @@ const usePhotoEditor = ({
         setFlipHorizontal(positions.flipHorizontal);
         setFlipVertical(positions.flipVertical);
         setZoom(positions.zoom);
-        setLineColor(actions.line.color);
-        setLineWidth(actions.line.width);
-        setLineStyle('hand-free');
-        drawingPathsRef.current = [];
-        setOffsetX(0);
-        setOffsetY(0);
-        setPanStart(null);
+        setEditorOffset(initialCords);
         setIsDragging(false);
         setAction('draw');
-        applyFilter();
-        setTextColor(actions.text.color);
-        setTextFont(actions.text.font);
-        setTextFontSize(actions.text.fontSize);
+        applyFilters();
+        applyDraws();
     };
 
     // Expose the necessary state and handlers for external use.
     return {
+        // GENERAL
         /** Reference to the canvas element that contain the image and is filters can be applyed. */
         imageCanvasRef,
         /** Reference to the canvas element that can recieve forms, write and other actions. */
         editorCanvasRef,
         /** Source URL of the image being edited. */
         imageSrc,
+        /** Current action ('pan' or 'draw') */
+        action,
+        /** Map if there are action to undo */
+        canUndo,
+        /** Map if there are action to redo */
+        canRedo,
+
+        //FILTERS
+        /** Array to applyed filters */
+        filters,
         /** Current brightness level. */
         brightness,
         /** Current contrast level. */
@@ -400,38 +776,50 @@ const usePhotoEditor = ({
         saturate,
         /** Current grayscale level. */
         grayscale,
-        /** Current rotation angle in degrees. */
-        rotate,
         /** Flag indicating if the image is flipped horizontally. */
         flipHorizontal,
         /** Flag indicating if the image is flipped vertically. */
         flipVertical,
         /** Current zoom level. */
         zoom,
-        /** Flag indicating if the image is being dragged. */
+        /** Current rotation angle in degrees. */
+        rotate,
+
+        //DRAWING
+        /** Flag indicating if the image is being drawing. */
+        isDrawing,
+        /** Current draw tool ('pen' or 'line' or 'circle' or 'arrow' or 'eraser') */
+        drawTool,
+        /** Current draw color */
+        drawColor,
+        /** Current brushSize */
+        brushSize,
+
+        //PANNING
+        /** Flag indicating if the image is being panning. */
         isDragging,
-        /** Starting coordinates for panning. */
-        panStart,
-        /** Current horizontal offset for panning. */
-        offsetX,
-        /** Current vertical offset for panning. */
-        offsetY,
-        /** Current action ('pan' or 'draw') */
-        action,
-        /** Current actions history */
-        history,
-        /** Current line color. */
-        lineColor,
-        /** Current line width. */
-        lineWidth,
-        /** Current line style - hand-free or straight - default: hand-free */
-        lineStyle,
-        /** Current text color */
-        textColor,
-        /** Current text font */
-        textFont,
-        /** Current text font size */
-        textFontSize,
+        
+        //WRITTING
+        /** Map the offset of the current text */
+        writeEditorPos,
+        /** The current text to be written */
+        writeText,
+        writeFontFamily,
+        writeFontSize,
+        writeColor,
+        writeRotation,
+        writeScale,
+
+        //SETTERS
+        //GENERAL
+        /** Function to set the action. */
+        setAction,
+        /** Function to reset filters and styles to default. */
+        resetFilters,
+        /** Function to generate the edited image src. */
+        generateEditedImage,
+
+        //FILTERS
         /** Function to set the brightness level. */
         setBrightness,
         /** Function to set the contrast level. */
@@ -440,56 +828,60 @@ const usePhotoEditor = ({
         setSaturate,
         /** Function to set the grayscale level. */
         setGrayscale,
-        /** Function to set the rotation angle. */
-        setRotate,
         /** Function to set the horizontal flip state. */
         setFlipHorizontal,
         /** Function to set the vertical flip state. */
         setFlipVertical,
         /** Function to set the zoom level. */
         setZoom,
-        /** Function to set the dragging state. */
-        setIsDragging,
-        /** Function to set the starting coordinates for panning. */
-        setPanStart,
-        /** Function to set the horizontal offset for panning. */
-        setOffsetX,
-        /** Function to set the vertical offset for panning. */
-        setOffsetY,
-        /** Function to zoom in. */
-        handleZoomIn,
-        /** Function to zoom out. */
-        handleZoomOut,
-        /** Function to handle pointer down events. */
+        /** Function to set the rotation angle. */
+        setRotate,
+        
+        // DRAWING
+        /** Function to set the draw tool (available to action draw). */
+        setDrawTool,
+        /** Function to set drawing tool's color. */
+        setDrawColor,
+        /** Function to set drawing tool's size. */
+        setBrushSize,
+
+        // WRITTING
+        /** Function to set write text. */
+        setWriteText,
+        /** Function to set write font family. */
+        setWriteFontFamily,
+        /** Function to set write font size. */
+        setWriteFontSize,
+        /** Function to set write color. */
+        setWriteColor,
+        /** Function to set write rotation. */
+        setWriteRotation,
+        /** Function to set write scale. */
+        setWriteScale,
+        /** Function to update the current write selected. */
+        updateText,
+
+        // HANDLERS
+        /** Function to handle zoom undo. */
+        handleUndo,
+        /** Function to handle zoom redo. */
+        handleRedo,
+        /** Function to handle canvas click. */
+        handleCanvasClick,
+        /** Function to handle canvas double click. */
+        handleDoubleClick,
+        /** Function to handle canvas pointer down. */
         handlePointerDown,
-        /** Function to handle pointer up events. */
-        handlePointerUp,
-        /** Function to handle pointer move events. */
+        /** Function to handle canvas pointer move. */
         handlePointerMove,
-        /** Function to handle wheel events for zooming. */
+        /** Function to handle canvas pointer up. */
+        handlePointerUp,
+        /** Function to handle canvas wheel. */
         handleWheel,
-        /** Function to generate the edited image src. */
-        generateEditedImage,
-        /** Function to reset filters and styles to default. */
-        resetFilters,
-        /** Function to apply filters and transformations. */
-        applyFilter,
-        /** Function to set the action. */
-        setAction,
-        /** Function to set history */
-        setHistory,
-        /** Function to set the line color. */
-        setLineColor,
-        /** Function to set the line width. */
-        setLineWidth,
-        /** Function to set the line style */
-        setLineStyle,
-        /** Function to set the text color */
-        setTextColor,
-        /** Function to set the text font */
-        setTextFont,
-        /** Function to set the text font size */
-        setTextFontSize
+        /** Function to handle zoom in. */
+        handleZoomIn,
+        /** Function to handle zoom out. */
+        handleZoomOut,
     };
 };
 

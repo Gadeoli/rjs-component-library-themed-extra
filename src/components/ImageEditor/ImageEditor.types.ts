@@ -1,12 +1,12 @@
 import React from "react";
 
-export interface ImageEditorProps {
+export interface DefaultProps {
     /**
      * The image source.
      */
     src: string | undefined;
 
-    actions: ImageEditorActionsProps;
+    actions: ActionsProps;
 
     /**
      * Function invoked when the edited image is saved.
@@ -25,7 +25,7 @@ export interface ImageEditorProps {
      *     rotate: 'Turn',
      * }
      */
-    labels?: ImageEditorTranslationsProps;
+    labels?: TranslationsProps;
 
     /**
      * Set loading style effects
@@ -48,7 +48,7 @@ export interface ImageOnSaveProps {
     e?: any
 };
 
-export interface ImageEditorActionsProps {
+export interface ActionsProps {
     /**
      * Whether to allow color editing options.
      * @default true
@@ -86,65 +86,33 @@ export interface ImageEditorActionsProps {
     write?: boolean;
 }
 
-export interface ImageEditorTranslationsProps {
-    brushColor: ImageEditorLabelProps;
-    brushWidth: ImageEditorLabelProps;
-    brightness: ImageEditorLabelProps;
-    contrast: ImageEditorLabelProps;
-    draw: ImageEditorLabelProps;
-    flip: ImageEditorLabelProps;
-    grayscale: ImageEditorLabelProps;
-    horizontal: ImageEditorLabelProps;
-    pan: ImageEditorLabelProps;
-    reset: ImageEditorLabelProps;
-    rotate: ImageEditorLabelProps;
-    saturate: ImageEditorLabelProps;
-    save: ImageEditorLabelProps;
-    vertical: ImageEditorLabelProps;
-    zoom: ImageEditorLabelProps;
-    write: ImageEditorLabelProps;
+export interface TranslationsProps {
+    arrow: LabelProps;
+    brushColor: LabelProps;
+    brushWidth: LabelProps;
+    brightness: LabelProps;
+    circle: LabelProps;
+    contrast: LabelProps;
+    controls: LabelProps,
+    draw: LabelProps;
+    emptySelect: LabelProps;
+    eraser: LabelProps;
+    flip: LabelProps;
+    grayscale: LabelProps;
+    horizontal: LabelProps;
+    line: LabelProps;
+    pan: LabelProps;
+    pen: LabelProps;
+    reset: LabelProps;
+    rotate: LabelProps;
+    saturate: LabelProps;
+    save: LabelProps;
+    vertical: LabelProps;
+    zoom: LabelProps;
+    write: LabelProps;
 }
 
-export interface ImageEditorLabelProps {
+export interface LabelProps {
     txt: string;
     icon?: React.ReactNode;
-};
-
-export interface UseImageEditorProps {
-    src?: string;
-    scales?: UseImageEditorScalesProps;
-    positions?: UseImageEditorPositionsProps;
-    actions?: UseImageEditorActionsProps;
-};
-
-interface UseImageEditorScalesProps {
-    brightness: number;
-    contrast: number;
-    saturate: number;
-    grayscale: number;
-};
-
-interface UseImageEditorPositionsProps {
-    flipHorizontal: boolean;
-    flipVertical: boolean;
-    zoom: number;
-    rotate: number;
-};
-
-interface UseImageEditorLineProps {
-    color: string;
-    width: number;
-    style: 'hand-free' | 'straight';
-};
-
-interface UseImageEditorTextProps {
-    color: string;
-    font: string;
-    fontSize: number;
-};
-
-interface UseImageEditorActionsProps {
-    mode: 'pan' | 'draw' | 'flip' | 'write';
-    line: UseImageEditorLineProps;
-    text: UseImageEditorTextProps;
 };

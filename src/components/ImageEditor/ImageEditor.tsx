@@ -1,5 +1,5 @@
 import React, { FC, useEffect, useMemo, useState } from 'react';
-import { ImageEditorProps } from './ImageEditor.types';
+import { DefaultProps, TranslationsProps } from './ImageEditor.types';
 import { useTheme } from '../ThemeHandler';
 import { handleCssClassnames } from '@gadeoli/js-helpers-library';
 import styled from 'styled-components';
@@ -22,8 +22,9 @@ import {
     defaultXPM,
     defaultYPM
 } from '@gadeoli/rjs-component-library-themed';
+import { labels as defaultLabels } from './helpers';
 
-const ImageEditor: FC<ImageEditorProps> = ({
+const ImageEditor: FC<DefaultProps> = ({
     src,
     onSaveImage,
     actions = {
@@ -35,26 +36,7 @@ const ImageEditor: FC<ImageEditorProps> = ({
         text: true,
         write: false
     },
-    labels = {
-        brightness: {txt: 'Brightness'},
-        brushColor: {txt: 'Brush color'},
-        brushWidth: {txt: 'Brush width'},
-        contrast: {txt: 'Contrast'},
-        controls: {txt: 'Controls'},
-        draw: {txt: 'Draw'},
-        flip: {txt: 'Flip'},
-        grayscale: {txt: 'Grayscale'},
-        horizontal: {txt: 'Horizontally'},
-        pan: {txt: 'Pan & Zoom'}, //Mover / Arrastar
-        reset: {txt: 'Reset'},
-        rotate: {txt: 'Rotate'},
-        saturate: {txt: 'Saturate'},
-        save: {txt: 'Save'},
-        vertical: {txt: 'Vertically'},
-        zoom: {txt: 'Zoom'},
-        write: {txt: 'Write'},
-        emptySelect: {txt: 'No options selected'}
-    },
+    labels = defaultLabels,
     loading,
     className,
     style
@@ -69,29 +51,39 @@ const ImageEditor: FC<ImageEditorProps> = ({
 
     const usePhotoEditorProps = usePhotoEditor({ src });
     const {
+        //General
         imageCanvasRef,
         editorCanvasRef,
         imageSrc,
-        brightness,
-        setBrightness,
-        contrast,
-        setContrast,
-        saturate,
-        setSaturate,
-        grayscale,
-        setGrayscale,
-        rotate,
-        setRotate,
-        zoom,
-        setZoom,
         action,
+
+        //Filters
+        brightness,
+        contrast,
+        saturate,
+        grayscale,
+        rotate,
+        zoom,
+        
+        //Setters
+        //General
         setAction,
+        generateEditedImage,
+        resetFilters,
+
+        //Filters
+        setBrightness,
+        setContrast,
+        setSaturate,
+        setGrayscale,
+        setRotate,
+        setZoom,
+
+        //Handlers
         handlePointerDown,
         handlePointerUp,
         handlePointerMove,
         handleWheel,
-        resetFilters,
-        generateEditedImage,
     } = usePhotoEditorProps;
 
     const rangeActions = useMemo(() => [
@@ -169,7 +161,7 @@ const ImageEditor: FC<ImageEditorProps> = ({
                     &#128469;
                 </Button>
                 {   
-                    actions.drawing && action === 'draw' ? (<ActionDrawOptions usePhotoEditorProps={usePhotoEditorProps} loading={loading} />) : 
+                    actions.drawing && action === 'draw' ? (<ActionDrawOptions usePhotoEditorProps={usePhotoEditorProps} loading={loading} labels={labels}/>) : 
                     actions.write && action === 'write' ? (<ActionWriteOptions usePhotoEditorProps={usePhotoEditorProps} loading={loading} labels={labels} />) : 
                     actions.flip && action === 'flip' ? (<ActionFlipOptions usePhotoEditorProps={usePhotoEditorProps} loading={loading} labels={labels}/>) : 
                     ('')
@@ -245,42 +237,62 @@ const ImageEditor: FC<ImageEditorProps> = ({
 
 export default ImageEditor;
 
-const ActionDrawOptions: FC<{usePhotoEditorProps: any, loading: boolean | undefined}> = ({usePhotoEditorProps, loading}) => {
+const ActionDrawOptions: FC<{
+    usePhotoEditorProps: any, 
+    loading: boolean | undefined, 
+    labels: TranslationsProps
+}> = ({usePhotoEditorProps, loading, labels}) => {
     const {
-        lineColor,
-        setLineColor,
-        lineWidth,
-        setLineWidth,
-        lineStyle,
-        setLineStyle,
+        drawTool,
+        drawColor,
+        brushSize,
+
+        setDrawTool,
+        setDrawColor,
+        setBrushSize
     } = usePhotoEditorProps;
+
+    const [drawTools, setDrawTools] = useState<{key: string, value: string, selected: boolean | undefined}[]>([
+        {key: 'pen', value: labels.pen.txt},
+        {key: 'line', value: labels.line.txt},
+        {key: 'circle', value: labels.circle.txt},
+        {key: 'arrow', value: labels.arrow.txt},
+        {key: 'eraser', value: labels.eraser.txt}
+    ].map(f => ({
+        ...f,
+        selected: f.key === drawTool
+    })));
 
     return <SubAction>
         <InputColor 
             name="draw-color"
-            onChange={(e: any) => setLineColor(e.target.value)} 
-            value={lineColor} 
+            onChange={(e: any) => setDrawColor(e.target.value)} 
+            value={drawColor} 
             style={{marginRight: '0.25rem'}}
         />
         <Input 
             name={'line_width'}
             type='number'
-            onChange={(e: any) => setLineWidth(Number(e.target.value))}
-            value={lineWidth}
+            onChange={(e: any) => setBrushSize(Number(e.target.value))}
+            value={brushSize}
             min={2}
             max={100}
+            style={{marginRight: '0.5rem'}}
         />
-        <Checkbox
-            name='line-style'
-            type='primary' 
-            checkedValue={'hand-free'}
-            uncheckedValue={'straight'}
-            value={lineStyle}
-            onChange={(v: any) => setLineStyle(v)}
-            disabled={loading}
-            text={<>&#9997;</>}
-            checkedIcon={true}
-            style={{marginLeft: '0.5rem'}}
+        <Select
+            name="draw-tool"
+            className="full"
+            emptyText={labels.emptySelect.txt} 
+            values={drawTools} 
+            handleValues={({selected, values}) => {
+                setDrawTools(values);
+                setDrawTool(selected)
+            }}
+            handleSelect={(s) => {
+                // console.log(s)
+            }}
+            inlineDrawer={true}
+            toggleY='top'
         />
     </SubAction>;
 }

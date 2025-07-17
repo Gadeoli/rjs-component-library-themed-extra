@@ -6,9 +6,7 @@
 
 ImageEditor  
 
-## Sources
-
-[source I](https://codesandbox.io/p/sandbox/react-canvas-editor-1qrj5)  
+## Sources 
 
 ## ToDO
 
