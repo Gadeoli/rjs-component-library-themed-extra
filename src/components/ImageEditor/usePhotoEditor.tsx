@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { 
     DefaultProps,
 
@@ -11,7 +11,26 @@ import {
     PansItemProps,
     TextItemProps
 } from "./usePhotoEditor.types";
-import { drawArrowHead, extractFiltersFromState, generateCanvasImage, getMetrics, getMousePos, initialCords, isInsideWrite } from "./helpers";
+import { 
+    DRAW_TOOLS,
+    drawArrow,
+    drawArrowMove,
+    drawCircle,
+    drawCircleMove,
+    drawLine,
+    drawLineMove,
+    drawPath,
+    drawPathMove,
+    drawText,
+    generateCanvasImage, 
+    getMetrics, 
+    getMousePos, 
+    initialCords, 
+    isInsideWrite, 
+    MODES
+} from "./helpers";
+import { usePrevious } from "@gadeoli/rjs-hooks-library";
+import { debounce } from "../../helpers";
 
 const usePhotoEditor = ({
     src,
@@ -28,9 +47,9 @@ const usePhotoEditor = ({
         rotate: 0,
     },
     actions = {
-        mode: 'draw',
+        mode: MODES.DRAW,
         drawSettings: {
-            tool: 'pen',
+            tool: DRAW_TOOLS.PEN,
             color: "#000000",
             size: 10
         },
@@ -51,14 +70,8 @@ const usePhotoEditor = ({
 }: DefaultProps) => {
     const imageCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const editorCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const suppressHistoryRef = useRef<boolean>(false);
     const imgRef = useRef(new Image());
-
-    const isRestoringFiltersRef = useRef<boolean | null>(false); useRef(false);
-    const getFiltersEditorState = () => extractFiltersFromState({
-        ...positions,
-        ...scales,
-        editorOffset: editorOffset
-    })
 
     //state
     //general
@@ -80,7 +93,8 @@ const usePhotoEditor = ({
     const [flipVertical, setFlipVertical] = useState(positions.flipVertical);
     const [zoom, setZoom] = useState(positions.zoom);
     const [rotate, setRotate] = useState(positions.rotate);
-    const filtersSnapShot = JSON.stringify(getFiltersEditorState());
+    const [filtersSnapshot, setFiltersSnapshot] = useState<string | null>(null);
+    const prevFiltersSnapshot = usePrevious(filtersSnapshot);
     //## handling draw & panning & writting
     //general
     const [currentPath, setCurrentPath] = useState<PointProps[]>([]);
@@ -107,15 +121,56 @@ const usePhotoEditor = ({
     const [writeScale, setWriteScale] = useState(actions.writeSettings.scale);
     //State - end    
 
+    const getDefaultFiltersSnapshot = useMemo(() => {
+        return {
+            rotate: positions.rotate,
+            flipHorizontal: positions.flipHorizontal,
+            flipVertical: positions.flipVertical,
+            zoom: positions.zoom,
+            brightness: scales.brightness,
+            contrast: scales.contrast,
+            saturate: scales.saturate,
+            grayscale: scales.grayscale,
+            editorOffset: initialCords,
+        }
+    }, []);
+
+    const getFiltersSnapshot = () => {
+        return {
+            rotate,
+            flipHorizontal,
+            flipVertical,
+            zoom,
+            brightness,
+            contrast,
+            saturate,
+            grayscale,
+            editorOffset,
+        }
+    }
+
+    const withSuppressedHistory = (fn: () => void) => {
+        suppressHistoryRef.current = true;
+        fn();
+        setTimeout(() => {
+            suppressHistoryRef.current = false;
+        }, 0);
+    };
+
     // Effect to update the image source when the src changes.
     useEffect(() => {
         setImageSrc(src ? src : '');
-        resetFilters();
+        resetEditor();
     }, [src]);
 
     // Effect to apply transformations and filters whenever relevant state changes.
     useEffect(() => {
         applyFilters();
+
+        const snap = JSON.stringify(getFiltersSnapshot());
+
+        setFiltersSnapshot(snap);
+
     }, [
         src,
         imageSrc,
@@ -157,34 +212,41 @@ const usePhotoEditor = ({
         dragOffset.y,
     ]);
 
+    /**
+     * Generates a string representing the current filter settings.
+     *
+     * @returns {string} - A CSS filter string.
+     */
+    const getFilterString = (): string => {
+        return `brightness(${brightness}%) contrast(${contrast}%) grayscale(${grayscale}%) saturate(${saturate}%)`;
+    };
+
+    useEffect(() => {        
+        if(
+            filtersSnapshot && 
+            prevFiltersSnapshot && 
+            filtersSnapshot !== prevFiltersSnapshot && 
+            !suppressHistoryRef.current
+        ){
+            setFilters([...filters, filtersSnapshot]);
+            pushUndo();
+        }
+    }, [filtersSnapshot]);
+
     useEffect(() => {
-        if (isRestoringFiltersRef.current) return;
-
-        const timeout = setTimeout(() => {
-            //setFilters([...filters, filtersSnapShot]);
-            //pushUndo();
-        }, 200); // Adjust debounce delay as needed
-
-        return () => clearTimeout(timeout);
-    }, [filtersSnapShot]);
-
-    useEffect(() => {
-        const newFont = `${actions.writeSettings.fontSize}px ${actions.writeSettings.font}`;
+        const newFont = `${writeFontSize}px ${writeFontFamily}`;
         setWriteFont(newFont);
-    }, [writeFont, writeFontSize]);
+    }, [writeFontSize, writeFontFamily]);
 
     useEffect(() => {
-        setCanRedo(redoStack.length === 0);
-    }, [redoStack.length]);
-
-    useEffect(() => {
-        setCanUndo(undoStack.length === 0);
-    }, [undoStack.length]);
+        setCanRedo(redoStack.length !== 0);
+        setCanUndo(undoStack.length !== 0);
+    }, [undoStack.length, redoStack.length]);
 
     useEffect(() => {
         let c = '';
 
-        if(action === 'draw'){
+        if(action === MODES.DRAW){
             c =  'crosshair';
         }else if(action === 'pan'){
             c = 'grab';
@@ -195,38 +257,89 @@ const usePhotoEditor = ({
         setCursor(c);
     }, [action]);
 
-    const restoreFiltersEditorState = (state:any) => {
-        isRestoringFiltersRef.current = true;
+    const applyDraws = useCallback(debounce(() => {
+        const editorCanvas = editorCanvasRef.current;
+        const editorCtx = editorCanvas?.getContext('2d');
 
-        try {
-            const stackedFilterState = JSON.parse(state);
+        if(!editorCanvas || !editorCtx) return;
 
-            setBrightness(stackedFilterState.brightness);
-            setContrast(stackedFilterState.contrast);
-            setGrayscale(stackedFilterState.grayscale);
-            setSaturate(stackedFilterState.saturate);
-            setRotate(stackedFilterState.rotate);
-            setFlipHorizontal(stackedFilterState.flipHorizontal);
-            setFlipVertical(stackedFilterState.flipVertical);
-            setZoom(stackedFilterState.zoom);
-            setEditorOffset(stackedFilterState.offset);
-        } catch (error) {
-            console.log({
-                error,
-                state
-            });
+        editorCtx.clearRect(0, 0, editorCanvas.width, editorCanvas.height);
+
+        // Render drawings
+        drawings.forEach((drawing) => {
+            editorCtx.save();
+            editorCtx.lineCap = 'round';
+            editorCtx.lineJoin = 'round';
+            editorCtx.lineWidth = drawing.width;
+            
+            if (drawing.erase) {
+                editorCtx.globalCompositeOperation = 'destination-out';
+                editorCtx.strokeStyle = 'rgba(0,0,0,1)';
+            } else {
+                editorCtx.globalCompositeOperation = 'source-over';
+                editorCtx.strokeStyle = drawing.color || 'black';
+            }
+
+            if (drawing.tool === DRAW_TOOLS.LINE) drawLine(editorCtx, drawing);
+            else if (drawing.tool === DRAW_TOOLS.CIRCLE) drawCircle(editorCtx, drawing);    
+            else if (drawing.tool === DRAW_TOOLS.ARROW) drawArrow(editorCtx, drawing); 
+            else drawPath(editorCtx, drawing); 
+
+            editorCtx.restore();
+        });
+
+        // Preview current in-progress drawing
+        if (isDrawing && currentPath.length) {
+            editorCtx.save();
+            editorCtx.lineCap = 'round';
+            editorCtx.lineJoin = 'round';
+            editorCtx.lineWidth = brushSize;
+
+            if (drawTool === DRAW_TOOLS.ERASER) {
+                editorCtx.globalCompositeOperation = 'destination-out';
+                editorCtx.strokeStyle = 'rgba(0,0,0,1)';
+            } else {
+                editorCtx.globalCompositeOperation = 'source-over';
+                editorCtx.strokeStyle = drawColor;
+            }
+
+            if (drawTool === DRAW_TOOLS.LINE && currentPath.length === 2) drawLineMove(editorCtx, currentPath);
+            else if (drawTool === DRAW_TOOLS.CIRCLE && currentPath.length === 2) drawCircleMove(editorCtx, currentPath);
+            else if (drawTool === DRAW_TOOLS.ARROW && currentPath.length === 2) drawArrowMove(editorCtx, currentPath, brushSize, drawColor);
+            else if (drawTool === DRAW_TOOLS.PEN) drawPathMove(editorCtx, currentPath);
+
+            editorCtx.restore();
         }
 
-        requestAnimationFrame(() => {
-            isRestoringFiltersRef.current = false;
-        });
-    };
+        // Render texts
+        texts.forEach((t, i) => {
+            drawText(editorCtx, t);
+
+            if (i === selectedIndex) {
+                const { width, height } = getMetrics(t, editorCtx);
+                editorCtx.strokeStyle = 'red';
+                editorCtx.strokeRect(0, 0, width, height);
+            }
+
+            editorCtx.restore();
+        }); 
+    }, 25), [
+        editorCanvasRef,
+        drawings,
+        isDrawing,
+        currentPath,
+        brushSize,
+        drawTool,
+        drawColor,
+        texts,
+        selectedIndex
+    ]);
 
     /**
      * Applies the selected filters and transformations to image canvas.
      * And Set size and offset for both canvas
      */
-    const applyFilters = () => {
+    const applyFilters = useCallback(debounce(() => {
         if (!imageSrc) return;
 
         const imageCanvas = imageCanvasRef.current;
@@ -306,174 +419,19 @@ const usePhotoEditor = ({
                 applyDraws();
             }
         };
-    };
-
-    const applyDraws = () => {
-        const editorCanvas = editorCanvasRef.current;
-        const editorCtx = editorCanvas?.getContext('2d');
-
-        if(!editorCanvas || !editorCtx) return;
-
-        editorCtx.clearRect(0, 0, editorCanvas.width, editorCanvas.height);
-
-        // Render drawings
-        drawings.forEach((drawing) => {
-            editorCtx.save();
-            editorCtx.lineCap = 'round';
-            editorCtx.lineJoin = 'round';
-            editorCtx.lineWidth = drawing.width;
-            
-            if (drawing.erase) {
-                editorCtx.globalCompositeOperation = 'destination-out';
-                editorCtx.strokeStyle = 'rgba(0,0,0,1)';
-            } else {
-                editorCtx.globalCompositeOperation = 'source-over';
-                editorCtx.strokeStyle = drawing.color || 'black';
-            }
-
-            if (drawing.tool === 'line') {
-                const [p0, p1] = drawing.points;
-                
-                editorCtx.beginPath();
-                editorCtx.moveTo(p0.x, p0.y);
-                editorCtx.lineTo(p1.x, p1.y);
-                editorCtx.stroke();
-            } else if (drawing.tool === 'circle') {
-                const [center, edge] = drawing.points;
-                const radius = Math.hypot(edge.x - center.x, edge.y - center.y);
-                
-                editorCtx.beginPath();
-                editorCtx.arc(center.x, center.y, radius, 0, Math.PI * 2);
-                editorCtx.stroke();
-            } else if (drawing.tool === 'arrow') {
-                const [p0, p1] = drawing.points;
-
-                const headSize = 8 + drawing.width * 1.5;
-
-                // Calculate unit direction vector from p0 to p1
-                const dx = p1.x - p0.x;
-                const dy = p1.y - p0.y;
-                const length = Math.hypot(dx, dy);
-
-                const unitX = dx / length;
-                const unitY = dy / length;
-
-                // Trimmed end of the shaft (p1 shifted back by headSize)
-                const shaftEnd = {
-                x: p1.x - unitX * headSize,
-                y: p1.y - unitY * headSize,
-                };
-
-                // Draw the shaft
-                editorCtx.beginPath();
-                editorCtx.moveTo(p0.x, p0.y);
-                editorCtx.lineTo(shaftEnd.x, shaftEnd.y);
-                editorCtx.stroke();
-
-                // Compute arrowhead based on shaftEnd → p1 direction
-                const [left, right, tip] = drawArrowHead(shaftEnd, p1, headSize, drawing.width);
-
-                // Draw the arrowhead
-                editorCtx.beginPath();
-                editorCtx.moveTo(tip.x, tip.y);
-                editorCtx.lineTo(left.x, left.y);
-                editorCtx.lineTo(right.x, right.y);
-                editorCtx.closePath();
-                editorCtx.fillStyle = drawing.color || 'black';
-                editorCtx.fill();
-            } else {
-                // pen / eraser path
-                if (drawing.points.length < 2) return;
-                
-                editorCtx.beginPath();
-                editorCtx.moveTo(drawing.points[0].x, drawing.points[0].y);
-                
-                drawing.points.forEach((pt) => editorCtx.lineTo(pt.x, pt.y));
-                
-                editorCtx.stroke();
-            }
-
-            editorCtx.restore();
-        });
-
-        // Preview current in-progress drawing
-        if (isDrawing && currentPath.length) {
-            editorCtx.save();
-            editorCtx.lineCap = 'round';
-            editorCtx.lineJoin = 'round';
-            editorCtx.lineWidth = brushSize;
-
-            if (drawTool === 'eraser') {
-                editorCtx.globalCompositeOperation = 'destination-out';
-                editorCtx.strokeStyle = 'rgba(0,0,0,1)';
-            } else {
-                editorCtx.globalCompositeOperation = 'source-over';
-                editorCtx.strokeStyle = drawColor;
-            }
-
-            if (drawTool === 'line' && currentPath.length === 2) {
-                const [p0, p1] = currentPath;
-
-                editorCtx.beginPath();
-                editorCtx.moveTo(p0.x, p0.y);
-                editorCtx.lineTo(p1.x, p1.y);
-                editorCtx.stroke();
-            } else if (drawTool === 'circle' && currentPath.length === 2) {
-                const [center, edge] = currentPath;
-                const radius = Math.hypot(edge.x - center.x, edge.y - center.y);
-
-                editorCtx.beginPath();
-                editorCtx.arc(center.x, center.y, radius, 0, Math.PI * 2);
-                editorCtx.stroke();
-            } else if (drawTool === 'arrow' && currentPath.length === 2) {
-                const [p0, p1] = currentPath;
-
-                editorCtx.beginPath();
-                editorCtx.moveTo(p0.x, p0.y);
-                editorCtx.lineTo(p1.x, p1.y);
-                editorCtx.stroke();
-
-                const headSize = 8 + brushSize * 1.5;
-                const [left, right] = drawArrowHead(p0, p1, headSize);
-
-                editorCtx.beginPath();
-                editorCtx.moveTo(p1.x, p1.y);
-                editorCtx.lineTo(left.x, left.y);
-                editorCtx.lineTo(right.x, right.y);
-                editorCtx.closePath();
-                editorCtx.fillStyle = drawColor;
-                editorCtx.fill();
-            } else if (drawTool === 'pen') {
-                editorCtx.beginPath();
-                editorCtx.moveTo(currentPath[0].x, currentPath[0].y);
-                currentPath.forEach((pt) => editorCtx.lineTo(pt.x, pt.y));
-                editorCtx.stroke();
-            }
-
-            editorCtx.restore();
-        }
-
-        // Render texts
-        texts.forEach((t, i) => {
-            const { lines, width, height, lineHeight } = getMetrics(t, editorCtx);
-
-            editorCtx.save();
-            editorCtx.translate(t.x, t.y);
-            editorCtx.rotate((t.rotation * Math.PI) / 180);
-            editorCtx.scale(t.scale, t.scale);
-            editorCtx.font = t.font;
-            editorCtx.fillStyle = t.color;
-            lines.forEach((ln, idx) => editorCtx.fillText(ln, 0, idx * lineHeight));
-
-            if (i === selectedIndex) {
-                editorCtx.strokeStyle = 'red';
-                editorCtx.strokeRect(0, 0, width, height);
-            }
-
-            editorCtx.restore();
-
-        }); 
-    };
+    }, 100), [
+        imageSrc,
+        imageCanvasRef,
+        editorCanvasRef,
+        imgRef,
+        zoom,
+        rotate,
+        flipHorizontal,
+        flipVertical,
+        editorOffset,
+        getFilterString,
+        applyDraws
+    ]);
 
     /**
      * Generates a image source from the canvas content.
@@ -504,15 +462,6 @@ const usePhotoEditor = ({
         );
     };
 
-    /**
-     * Generates a string representing the current filter settings.
-     *
-     * @returns {string} - A CSS filter string.
-     */
-    const getFilterString = (): string => {
-        return `brightness(${brightness}%) contrast(${contrast}%) grayscale(${grayscale}%) saturate(${saturate}%)`;
-    };
-
     // IMAGE HANDLES
     /**
      * Handles the zoom-in action.
@@ -530,6 +479,8 @@ const usePhotoEditor = ({
 
     // EDITOR HANDLES
     const pushUndo = () => {
+        if (suppressHistoryRef.current) return;
+
         setUndoStack((prev) => [
             ...prev,
             {
@@ -542,7 +493,7 @@ const usePhotoEditor = ({
         setRedoStack([]); // clear redo on new action
     };
 
-    const handlePansChange = ({handledPans, type} : {handledPans: any[], type: 'undo' | 'redo'}) => {     
+    const handlePansStackChange = ({handledPans, type} : {handledPans: any[], type: 'undo' | 'redo'}) => {     
         if(handledPans.length){
             const ps = handledPans[handledPans.length - 1]?.points;
 
@@ -564,64 +515,100 @@ const usePhotoEditor = ({
             }
         }
     }
+
+    const handleFiltersStackChange = ({handledFilters, type} : {handledFilters: any[], type: 'undo' | 'redo'}) => {
+        const unstacked = 
+            handledFilters.length >= 2 && type === 'undo' ? handledFilters[handledFilters.length - 2] :
+            handledFilters.length && type === 'redo' ? handledFilters[handledFilters.length - 1] :
+            null;
+
+        if(!unstacked){
+            resetFilters();
+            return;
+        }
+
+        if(unstacked === filtersSnapshot) return;
+
+        try {
+            const stackedFilters = JSON.parse(unstacked);
+
+            const updates: [any, any, React.Dispatch<any>][] = [
+                [stackedFilters.rotate, rotate, setRotate],
+                [stackedFilters.flipHorizontal, flipHorizontal, setFlipHorizontal],
+                [stackedFilters.flipVertical, flipVertical, setFlipVertical],
+                [stackedFilters.zoom, zoom, setZoom],
+                [stackedFilters.brightness, brightness, setBrightness],
+                [stackedFilters.contrast, contrast, setContrast],
+                [stackedFilters.saturate, saturate, setSaturate],
+                [stackedFilters.grayscale, grayscale, setGrayscale],
+                [stackedFilters.editorOffset, editorOffset, setEditorOffset],
+            ];
+
+            updates.forEach(([stackedVal, currentVal, setter]) => {
+                if(stackedVal !== currentVal) setter(stackedVal);
+            });
+            
+            setFiltersSnapshot(unstacked);
+        } catch (error) {
+            console.error("Failed to parse filter snapshot:", error);
+        }
+    }
  
     const handleUndo = () => {
         if (!undoStack.length) return;
 
-        const prev = undoStack[undoStack.length - 1];
+        withSuppressedHistory(() => {
+            const prev = undoStack[undoStack.length - 1];
 
-        setUndoStack((stack) => stack.slice(0, -1));
-        
-        setRedoStack((redo) => [
-            ...redo,
-            {
-                filters: JSON.parse(JSON.stringify(filters)),
-                texts: JSON.parse(JSON.stringify(texts)),
-                drawings: JSON.parse(JSON.stringify(drawings)),
-                pans: JSON.parse(JSON.stringify(pans)),
-            },
-        ]);
+            setUndoStack((stack) => stack.slice(0, -1));
+            
+            setRedoStack((redo) => [
+                ...redo,
+                {
+                    filters: JSON.parse(JSON.stringify(filters)),
+                    texts: JSON.parse(JSON.stringify(texts)),
+                    drawings: JSON.parse(JSON.stringify(drawings)),
+                    pans: JSON.parse(JSON.stringify(pans)),
+                },
+            ]);
 
-        handlePansChange({handledPans: pans, type: 'undo'});
+            handlePansStackChange({handledPans: pans, type: 'undo'});
+            handleFiltersStackChange({handledFilters: filters, type: 'undo'});
 
-        if(prev.filters.length){
-            restoreFiltersEditorState(prev.filters[prev.filters.length - 1]);
-        }
-
-        setTexts(prev.texts);
-        setDrawings(prev.drawings);
-        setPans(prev.pans);
-        setFilters(prev.filters),
-        setSelectedIndex(null);
+            setTexts(prev.texts);
+            setDrawings(prev.drawings);
+            setPans(prev.pans);
+            setFilters(prev.filters),
+            setSelectedIndex(null);
+        })
     };
 
     const handleRedo = () => {
         if (!redoStack.length) return;
 
-        const next = redoStack[redoStack.length - 1];
+        withSuppressedHistory(() => {
+            const next = redoStack[redoStack.length - 1];
 
-        setRedoStack((stack) => stack.slice(0, -1));
-        setUndoStack((undo) => [
-            ...undo,
-            {
-                filters: JSON.parse(JSON.stringify(filters)),
-                texts: JSON.parse(JSON.stringify(texts)),
-                drawings: JSON.parse(JSON.stringify(drawings)),
-                pans: JSON.parse(JSON.stringify(pans)),
-            },
-        ]);
+            setRedoStack((stack) => stack.slice(0, -1));
+            setUndoStack((undo) => [
+                ...undo,
+                {
+                    filters: JSON.parse(JSON.stringify(filters)),
+                    texts: JSON.parse(JSON.stringify(texts)),
+                    drawings: JSON.parse(JSON.stringify(drawings)),
+                    pans: JSON.parse(JSON.stringify(pans)),
+                },
+            ]);
 
-        handlePansChange({handledPans: next.pans, type: 'redo'});
+            handlePansStackChange({handledPans: next.pans, type: 'redo'});
+            handleFiltersStackChange({handledFilters: next.filters, type: 'redo'});
 
-        if(next.filters.length){
-            restoreFiltersEditorState(next.filters[next.filters.length - 1]);
-        }
-
-        setTexts(next.texts);
-        setDrawings(next.drawings);
-        setPans(next.pans);
-        setFilters(next.filters)
-        setSelectedIndex(null);
+            setTexts(next.texts);
+            setDrawings(next.drawings);
+            setPans(next.pans);
+            setFilters(next.filters)
+            setSelectedIndex(null);
+        })
     };
 
     /**
@@ -715,11 +702,11 @@ const usePhotoEditor = ({
 
         const pos = getMousePos(event, editorCanvasRef);
 
-        if (action === 'draw') {
+        if (action === MODES.DRAW) {
             pushUndo();
             setIsDrawing(true);
 
-            if (drawTool === 'line' || drawTool === 'arrow' || drawTool === 'circle') {
+            if (drawTool === DRAW_TOOLS.LINE || drawTool === DRAW_TOOLS.ARROW || drawTool === DRAW_TOOLS.CIRCLE) {
                 setCurrentPath([pos]); // start point
             } else {
                 setCurrentPath([pos]);
@@ -759,8 +746,8 @@ const usePhotoEditor = ({
 
         const pos = getMousePos(event, editorCanvasRef);
 
-        if (action === 'draw' && isDrawing) {
-            if (drawTool === 'line' || drawTool === 'arrow' || drawTool === 'circle') {
+        if (action === MODES.DRAW && isDrawing) {
+            if (drawTool === DRAW_TOOLS.LINE || drawTool === DRAW_TOOLS.ARROW || drawTool === DRAW_TOOLS.CIRCLE) {
                 setCurrentPath((prev) => (prev.length === 1 ? [prev[0], pos] : [prev[0], pos]));
             } else {
                 setCurrentPath((prev) => [...prev, pos]);
@@ -795,7 +782,7 @@ const usePhotoEditor = ({
         setIsDragging(false);
         setIsDrawing(false);
 
-        if (action === 'draw') finalizeDrawing();
+        if (action === MODES.DRAW) finalizeDrawing();
         if (action === 'pan') finalizePanning();
     };
 
@@ -819,33 +806,33 @@ const usePhotoEditor = ({
     const finalizeDrawing = () => {
         if (!isDrawing) return;
 
-        if (drawTool === 'line' && currentPath.length === 2) {
+        if (drawTool === DRAW_TOOLS.LINE && currentPath.length === 2) {
             setDrawings((prev) => [
                 ...prev,
-                { tool: 'line', points: currentPath, color: drawColor, width: brushSize },
+                { tool: DRAW_TOOLS.LINE, points: currentPath, color: drawColor, width: brushSize },
             ]);
-        } else if (drawTool === 'circle' && currentPath.length === 2) {
+        } else if (drawTool === DRAW_TOOLS.CIRCLE && currentPath.length === 2) {
             setDrawings((prev) => [
                 ...prev,
-                { tool: 'circle', points: currentPath, color: drawColor, width: brushSize },
+                { tool: DRAW_TOOLS.CIRCLE, points: currentPath, color: drawColor, width: brushSize },
             ]);
-        } else if (drawTool === 'arrow' && currentPath.length === 2) {
+        } else if (drawTool === DRAW_TOOLS.ARROW && currentPath.length === 2) {
             setDrawings((prev) => [
                 ...prev,
-                { tool: 'arrow', points: currentPath, color: drawColor, width: brushSize },
+                { tool: DRAW_TOOLS.ARROW, points: currentPath, color: drawColor, width: brushSize },
             ]);
-        } else if (drawTool === 'eraser') {
+        } else if (drawTool === DRAW_TOOLS.ERASER) {
             if (currentPath.length > 1){
                 setDrawings((prev) => [
                     ...prev,
-                    { tool: 'eraser', points: currentPath, width: brushSize, erase: true },
+                    { tool: DRAW_TOOLS.ERASER, points: currentPath, width: brushSize, erase: true },
                 ]);
             }
-        } else if (drawTool === 'pen') {
+        } else if (drawTool === DRAW_TOOLS.PEN) {
             if (currentPath.length > 1){
                 setDrawings((prev) => [
                     ...prev,
-                    { tool: 'pen', points: currentPath, color: drawColor, width: brushSize },
+                    { tool: DRAW_TOOLS.PEN, points: currentPath, color: drawColor, width: brushSize },
                 ]);
             }
         }
@@ -870,6 +857,8 @@ const usePhotoEditor = ({
      * Resets the filters and styles to its original state with the default settings.
      */
     const resetFilters = () => {
+        const snap = JSON.stringify(getDefaultFiltersSnapshot);
+
         setBrightness(scales.brightness);
         setContrast(scales.contrast);
         setSaturate(scales.saturate);
@@ -878,20 +867,25 @@ const usePhotoEditor = ({
         setFlipHorizontal(positions.flipHorizontal);
         setFlipVertical(positions.flipVertical);
         setZoom(positions.zoom);
+        setFiltersSnapshot(snap);
+    };
+
+    const resetEditor = () => {
+        resetFilters();
 
         setEditorOffset(initialCords);
         setIsDragging(false);
         setIsDrawing(false);
-        setAction('draw');
+        setAction(MODES.DRAW);
         setUndoStack([]);
         setRedoStack([]);
 
-        setDrawTool('pen');
+        setDrawTool(DRAW_TOOLS.PEN);
         setDrawings([]);
         setTexts([]);
         setPans([]);
         setFilters([]);
-    };
+    }
 
     // Expose the necessary state and handlers for external use.
     return {
@@ -960,8 +954,8 @@ const usePhotoEditor = ({
         //GENERAL
         /** Function to set the action. */
         setAction,
-        /** Function to reset filters and styles to default. */
-        resetFilters,
+        /** Function to reset the editor to default. */
+        resetEditor,
         /** Function to generate the edited image src. */
         generateEditedImage,
 

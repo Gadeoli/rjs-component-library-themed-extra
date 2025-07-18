@@ -1,8 +1,20 @@
 import { TranslationsProps } from "./ImageEditor.types";
-import { PointProps, TextItemProps } from "./usePhotoEditor.types";
+import { DrawingItemProps, PointProps, TextItemProps } from "./usePhotoEditor.types";
 
 export const WRAP_WIDTH = 200;
 export const initialCords = {x: 0, y: 0};
+export enum MODES {
+    DRAW='draw',
+    PAN='pan',
+    WRITE='write',
+}
+export enum DRAW_TOOLS {
+    PEN='pen',
+    LINE='line',
+    CIRCLE='circle',
+    ARROW='arrow',
+    ERASER='eraser'
+}
 
 export const getLines = (context: CanvasRenderingContext2D, txt: string, fnt: string) => {
     context.font = fnt;
@@ -55,11 +67,105 @@ export const isInsideWrite = (pos: PointProps, t: TextItemProps, ctx: CanvasRend
     return localX >= 0 && localX <= width && localY >= 0 && localY <= height;
 };
 
+export const drawLine = (ctx: CanvasRenderingContext2D, drawing: DrawingItemProps) => {
+    const [p0, p1] = drawing.points;
+
+    ctx.beginPath();
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(p1.x, p1.y);
+    ctx.stroke();
+}
+
+export const drawLineMove = (ctx: CanvasRenderingContext2D, path: PointProps[]) => {
+    const [p0, p1] = path;
+
+    ctx.beginPath();
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(p1.x, p1.y);
+    ctx.stroke();
+}
+
+export const drawCircle = (ctx: CanvasRenderingContext2D, drawing: DrawingItemProps) => {
+    const [center, edge] = drawing.points;
+    const radius = Math.hypot(edge.x - center.x, edge.y - center.y);
+    
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+}
+
+export const drawCircleMove = (ctx: CanvasRenderingContext2D, path: PointProps[]) => {
+    const [center, edge] = path;
+    const radius = Math.hypot(edge.x - center.x, edge.y - center.y);
+
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+}
+
+export const drawArrow = (ctx: CanvasRenderingContext2D, drawing: DrawingItemProps) => {
+    const [p0, p1] = drawing.points;
+
+    const headSize = 8 + drawing.width * 1.5;
+
+    // Calculate unit direction vector from p0 to p1
+    const dx = p1.x - p0.x;
+    const dy = p1.y - p0.y;
+    const length = Math.hypot(dx, dy);
+
+    const unitX = dx / length;
+    const unitY = dy / length;
+
+    // Trimmed end of the shaft (p1 shifted back by headSize)
+    const shaftEnd = {
+    x: p1.x - unitX * headSize,
+    y: p1.y - unitY * headSize,
+    };
+
+    // Draw the shaft
+    ctx.beginPath();
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(shaftEnd.x, shaftEnd.y);
+    ctx.stroke();
+
+    // Compute arrowhead based on shaftEnd → p1 direction
+    const [left, right, tip] = drawArrowHead(shaftEnd, p1, headSize, drawing.width);
+
+    // Draw the arrowhead
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(left.x, left.y);
+    ctx.lineTo(right.x, right.y);
+    ctx.closePath();
+    ctx.fillStyle = drawing.color || 'black';
+    ctx.fill();
+}
+
+export const drawArrowMove = (ctx: CanvasRenderingContext2D, path: PointProps[], brushSize: number, drawColor: string) => {
+    const [p0, p1] = path;
+
+    ctx.beginPath();
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(p1.x, p1.y);
+    ctx.stroke();
+
+    const headSize = 8 + brushSize * 1.5;
+    const [left, right] = drawArrowHead(p0, p1, headSize);
+
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(left.x, left.y);
+    ctx.lineTo(right.x, right.y);
+    ctx.closePath();
+    ctx.fillStyle = drawColor;
+    ctx.fill();
+}
+
 export const drawArrowHead = (
     p0: PointProps,
     p1: PointProps,
     size: number,
-  strokeWidth: number = 1
+    strokeWidth: number = 1
 ): [PointProps, PointProps, PointProps] => {
     const angle = Math.atan2(p1.y - p0.y, p1.x - p0.x);
 
@@ -85,6 +191,36 @@ export const drawArrowHead = (
 
     return [left, right, tip];
 };
+
+export const drawPath = (ctx: CanvasRenderingContext2D, drawing: DrawingItemProps) => {
+    if (drawing.points.length < 2) return;
+    
+    ctx.beginPath();
+    ctx.moveTo(drawing.points[0].x, drawing.points[0].y);
+    
+    drawing.points.forEach((pt) => ctx.lineTo(pt.x, pt.y));
+    
+    ctx.stroke();
+}
+
+export const drawPathMove = (ctx: CanvasRenderingContext2D, path: PointProps[]) => {
+    ctx.beginPath();
+    ctx.moveTo(path[0].x, path[0].y);
+    path.forEach((pt) => ctx.lineTo(pt.x, pt.y));
+    ctx.stroke();
+}
+
+export const drawText = (ctx: CanvasRenderingContext2D, textItem: TextItemProps) => {
+    const { lines, lineHeight } = getMetrics(textItem, ctx);
+
+    ctx.save();
+    ctx.translate(textItem.x, textItem.y);
+    ctx.rotate((textItem.rotation * Math.PI) / 180);
+    ctx.scale(textItem.scale, textItem.scale);
+    ctx.font = textItem.font;
+    ctx.fillStyle = textItem.color;
+    lines.forEach((ln, idx) => ctx.fillText(ln, 0, idx * lineHeight));
+}
 
 export const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>, canvasRef: React.RefObject<HTMLCanvasElement | null>): PointProps => {
     const defaultPos = initialCords;
@@ -160,18 +296,4 @@ export const labels : TranslationsProps = {
     vertical: {txt: 'Vertically'},
     zoom: {txt: 'Zoom'},
     write: {txt: 'Write'},
-}
-
-export const extractFiltersFromState = (state: any) => {
-    return {
-        brightness: state?.brightness,
-        contrast: state?.contrast,
-        grayscale: state?.grayscale,
-        saturate: state?.saturate,
-        rotate: state?.rotate,
-        flipHorizontal: state?.flipHorizontal,
-        flipVertical: state?.flipVertical,
-        zoom: state?.zoom,
-        offset: state?.editorOffset,
-    }
 }

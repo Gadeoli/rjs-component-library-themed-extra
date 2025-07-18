@@ -72,7 +72,7 @@ const ImageEditor: FC<DefaultProps> = ({
         //General
         setAction,
         generateEditedImage,
-        resetFilters,
+        resetEditor,
 
         //Filters
         setBrightness,
@@ -225,7 +225,7 @@ const ImageEditor: FC<DefaultProps> = ({
 
             <Action>
                 <Button onClick={() => {
-                    resetFilters();
+                    resetEditor();
                     setShowSubActions(false);
                 }}>
                     &#8635;
@@ -233,7 +233,7 @@ const ImageEditor: FC<DefaultProps> = ({
             </Action>
 
             <Action>
-                <Button disabled={canUndo} onClick={() => {
+                <Button disabled={!canUndo} onClick={() => {
                     handleUndo();
                     setShowSubActions(false);
                 }}>
@@ -242,7 +242,7 @@ const ImageEditor: FC<DefaultProps> = ({
             </Action>
 
             <Action>
-                <Button disabled={canRedo} onClick={() => {
+                <Button disabled={!canRedo} onClick={() => {
                     handleRedo();
                     setShowSubActions(false);
                 }}>
