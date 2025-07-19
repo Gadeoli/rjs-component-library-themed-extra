@@ -15,6 +15,8 @@ export enum DRAW_TOOLS {
     ARROW='arrow',
     ERASER='eraser'
 }
+export const commonFontSizesPt = [8, 10, 12, 14, 16, 18, 24, 36, 48, 72, 144];
+export const commonBrushSizesPt = [1, 2, 3, 5, 7, 10, 15, 20, 25, 50, 75, 100, 125];
 
 export const getLines = (context: CanvasRenderingContext2D, txt: string, fnt: string) => {
     context.font = fnt;
@@ -50,6 +52,13 @@ export const getMetrics = (t: TextItemProps, ctx: CanvasRenderingContext2D) => {
     return { lines, width, height, lineHeight };
 };
 
+export const ptToPx = (pt: number): number => pt * (96 / 72);
+
+export const getCanvasPtToPx = (ptSize: number, zoom: number): number => {
+    const basePx = ptToPx(ptSize);
+    return basePx * zoom; // adjust for canvas scale
+};
+
 export const isInsideWrite = (pos: PointProps, t: TextItemProps, ctx: CanvasRenderingContext2D) => {
     if (!ctx) return false;
     
@@ -65,6 +74,68 @@ export const isInsideWrite = (pos: PointProps, t: TextItemProps, ctx: CanvasRend
     const localY = ry / t.scale;
     
     return localX >= 0 && localX <= width && localY >= 0 && localY <= height;
+};
+
+export const getMousePos = (
+    e: React.MouseEvent<HTMLCanvasElement>, 
+    canvasRef: React.RefObject<HTMLCanvasElement | null>,
+    editorOffset: PointProps,
+    zoom: number,
+    flipX: boolean,
+    flipY: boolean,
+    rotate: number
+): PointProps => {
+    const defaultPos = initialCords;
+
+    const canvas = canvasRef.current;
+    const rect = canvas?.getBoundingClientRect();
+
+    if (!canvas || !rect) return defaultPos;
+
+    // Convert to internal canvas space
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    // Mouse position relative to canvas in screen space && apply scale
+    let x = (e.clientX - rect.left) * scaleX;
+    let y = (e.clientY - rect.top) * scaleY;
+
+    const zoomedWidth = canvas.width * zoom;
+    const zoomedHeight = canvas.height * zoom;
+
+    const translateX = (canvas.width - zoomedWidth) / 2 + editorOffset.x;
+    const translateY = (canvas.height - zoomedHeight) / 2 + editorOffset.y;
+
+    // Fix offset (panning)
+    x -= translateX;
+    y -= translateY;
+
+    // Apply zoom correction
+    x /= zoom;
+    y /= zoom;
+
+    // Apply flip correction
+    if (flipX) x = canvas.width - x;
+    if (flipY) y = canvas.height - y;
+
+    // Step 5: undo rotation (about center)
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const dx = x - cx;
+    const dy = y - cy;
+    
+    const angle = (rotate * Math.PI) / 180;
+    const cos = Math.cos(-angle);
+    const sin = Math.sin(-angle);
+
+    const rotatedX = dx * cos - dy * sin;
+    const rotatedY = dx * sin + dy * cos;
+
+    // Move back from origin
+    x = rotatedX + cx;
+    y = rotatedY + cy;
+
+    return { x, y };
 };
 
 export const drawLine = (ctx: CanvasRenderingContext2D, drawing: DrawingItemProps) => {
@@ -221,23 +292,6 @@ export const drawText = (ctx: CanvasRenderingContext2D, textItem: TextItemProps)
     ctx.fillStyle = textItem.color;
     lines.forEach((ln, idx) => ctx.fillText(ln, 0, idx * lineHeight));
 }
-
-export const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>, canvasRef: React.RefObject<HTMLCanvasElement | null>): PointProps => {
-    const defaultPos = initialCords;
-
-    const canvas = canvasRef.current;
-    const rect = canvas?.getBoundingClientRect();
-
-    if (!canvas || !rect) return defaultPos;
-
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-
-    return { 
-        x: (e.clientX - rect.left) * scaleX, 
-        y: (e.clientY - rect.top) * scaleY 
-    };
-};
 
 /**
  * Generates a image source from the canvas content.

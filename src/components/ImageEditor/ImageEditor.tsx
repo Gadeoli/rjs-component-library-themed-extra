@@ -4,7 +4,7 @@ import { useTheme } from '../ThemeHandler';
 import { handleCssClassnames } from '@gadeoli/js-helpers-library';
 import styled from 'styled-components';
 import usePhotoEditor from './usePhotoEditor';
-import { transparentize } from 'polished';
+import { margin, transparentize } from 'polished';
 import { 
     Container,
     Range, 
@@ -34,7 +34,7 @@ const ImageEditor: FC<DefaultProps> = ({
         zoom: true,
         drawing: true,
         text: true,
-        write: false
+        write: true
     },
     labels = defaultLabels,
     loading,
@@ -86,7 +86,10 @@ const ImageEditor: FC<DefaultProps> = ({
         handlePointerDown,
         handlePointerUp,
         handlePointerOut,
+        handlePointerEnter,
         handlePointerMove,
+        handleClick,
+        handleDoubleClick,
         handleWheel,
         handleRedo,
         handleUndo,
@@ -149,19 +152,22 @@ const ImageEditor: FC<DefaultProps> = ({
         handleCanvasActions();
     }, []);
 
-    useEffect(() => {
-        // console.log(usePhotoEditorProps);
-    }, [usePhotoEditorProps.drawTool]);
-
     return (<Container type='clean' className={classNames} style={style}>
         {imageSrc && (<CanvasContainer>
             <Canvas
                 ref={imageCanvasRef}
+
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerOut={handlePointerOut}
+                onPointerEnter={handlePointerEnter}
+                
                 onWheel={handleWheel}
+
+                onClick={handleClick}
+                onDoubleClick={handleDoubleClick}
+
                 style={{
                     cursor: cursor
                 }}
@@ -207,16 +213,30 @@ const ImageEditor: FC<DefaultProps> = ({
                         {rangeActions.map((ac, k) => {
                             const keyParam = ac.name as keyof typeof labels;
 
-                            return (<Action key={k}>
-                                <Range
-                                    name={ac.name}
-                                    min={ac.min}
-                                    max={ac.max}
-                                    value={ac.value}
-                                    onChange={(e: any) => ac.onChange(Number(e.target.value))}
-                                    step={ac.step}
-                                />
-                                <Label>{labels[keyParam].txt}</Label>
+                            return (<Action key={k} style={{display: 'flex'}}>
+                                
+                                <ActionLabelContainer>
+                                    <Label>{labels[keyParam].txt}</Label>
+                                    <Range
+                                        name={ac.name + '_input_slider'}
+                                        min={ac.min}
+                                        max={ac.max}
+                                        value={ac.value}
+                                        onChange={(e: any) => ac.onChange(Number(e.target.value))}
+                                        step={ac.step}
+                                    />
+                                </ActionLabelContainer>
+                                <Input 
+                                        name={ac.name}
+                                        min={ac.min}
+                                        max={ac.max}
+                                        type='number'
+                                        value={ac.value}
+                                        onChange={(e: any) => ac.onChange(Number(e.target.value))}
+                                        style={{
+                                            marginLeft: '4px',
+                                        }}
+                                    />
                             </Action>)
                         })}
                     </CardContent>
@@ -331,12 +351,19 @@ const ActionDrawOptions: FC<{
 
 const ActionWriteOptions: FC<{usePhotoEditorProps: any, loading: boolean | undefined, labels: any}> = ({usePhotoEditorProps, loading, labels}) => {
     const {
-        textColor,
-        setTextColor,
-        textFont,
-        setTextFont,
-        textFontSize,
-        setTextFontSize
+        writeText,
+        writeFontFamily,
+        writeFontSize,
+        writeColor,
+        writeRotation,
+        writeScale,
+
+        setWriteText,
+        setWriteFontFamily,
+        setWriteFontSize,
+        setWriteColor,
+        setWriteRotation,
+        setWriteScale,
     } = usePhotoEditorProps;
 
     const [fonts, setFonts] = useState<{key: string, value: string, selected: boolean | undefined}[]>([
@@ -347,21 +374,21 @@ const ActionWriteOptions: FC<{usePhotoEditorProps: any, loading: boolean | undef
         {key: 'Courier New', value: 'Courier New'},
     ].map(f => ({
         ...f,
-        selected: f.key === textFont
+        selected: f.key === writeFontFamily
     })));
 
     return <SubAction>
         <InputColor 
             name="draw-color"
-            onChange={(e: any) => setTextColor(e.target.value)} 
-            value={textColor} 
+            onChange={(e: any) => setWriteColor(e.target.value)} 
+            value={writeColor} 
             style={{marginRight: '0.25rem'}}
         />
         <Input 
             name={'line_width'}
             type='number'
-            onChange={(e: any) => setTextFontSize(Number(e.target.value))}
-            value={textFontSize}
+            onChange={(e: any) => setWriteFontSize(Number(e.target.value))}
+            value={writeFontSize}
             min={2}
             max={100}
             style={{marginRight: '0.25rem'}}
@@ -373,7 +400,7 @@ const ActionWriteOptions: FC<{usePhotoEditorProps: any, loading: boolean | undef
             values={fonts} 
             handleValues={({selected, values}) => {
                 setFonts(values);
-                setTextFont(selected)
+                setWriteFontFamily(selected)
             }}
             handleSelect={(s) => {
                 // console.log(s)
@@ -497,4 +524,10 @@ const Action = styled.div`
         flex-wrap: wrap;
         max-height: 5rem;
     }
+`;
+
+const ActionLabelContainer = styled.div`
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
 `;

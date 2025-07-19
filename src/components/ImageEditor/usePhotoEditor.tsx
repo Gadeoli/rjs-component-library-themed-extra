@@ -12,6 +12,8 @@ import {
     TextItemProps
 } from "./usePhotoEditor.types";
 import { 
+    commonBrushSizesPt,
+    commonFontSizesPt,
     DRAW_TOOLS,
     drawArrow,
     drawArrowMove,
@@ -23,6 +25,7 @@ import {
     drawPathMove,
     drawText,
     generateCanvasImage, 
+    getCanvasPtToPx, 
     getMetrics, 
     getMousePos, 
     initialCords, 
@@ -31,6 +34,7 @@ import {
 } from "./helpers";
 import { usePrevious } from "@gadeoli/rjs-hooks-library";
 import { debounce } from "../../helpers";
+import useWindowScrollLock from "./useWindowScrollLock";
 
 const usePhotoEditor = ({
     src,
@@ -51,12 +55,12 @@ const usePhotoEditor = ({
         drawSettings: {
             tool: DRAW_TOOLS.PEN,
             color: "#000000",
-            size: 10
+            size: commonBrushSizesPt[4]
         },
         writeSettings: {
             text: '',
             font: 'Arial',
-            fontSize: 20,
+            fontSize: commonFontSizesPt[2],
             color: '#000000',
             x: 0,
             y: 0,
@@ -121,6 +125,9 @@ const usePhotoEditor = ({
     const [writeScale, setWriteScale] = useState(actions.writeSettings.scale);
     //State - end    
 
+    //custom hooks
+    const { enableScrollLock, disableScrollLock } = useWindowScrollLock();
+
     const getDefaultFiltersSnapshot = useMemo(() => {
         return {
             rotate: positions.rotate,
@@ -170,7 +177,6 @@ const usePhotoEditor = ({
         const snap = JSON.stringify(getFiltersSnapshot());
 
         setFiltersSnapshot(snap);
-
     }, [
         src,
         imageSrc,
@@ -234,7 +240,8 @@ const usePhotoEditor = ({
     }, [filtersSnapshot]);
 
     useEffect(() => {
-        const newFont = `${writeFontSize}px ${writeFontFamily}`;
+        const pxWriteFontSize = getCanvasPtToPx(writeFontSize, zoom);
+        const newFont = `${pxWriteFontSize}px ${writeFontFamily}`;
         setWriteFont(newFont);
     }, [writeFontSize, writeFontFamily]);
 
@@ -257,9 +264,36 @@ const usePhotoEditor = ({
         setCursor(c);
     }, [action]);
 
-    const applyDraws = useCallback(debounce(() => {
+    useEffect(() => {
+        const imageTest = new Image();
+        imageTest.src = imageSrc;
+        imageTest.onload = () => {
+            const lg = (imageTest.width > 1000 || imageTest.height > 1000);
+            const xl = (imageTest.width > 2000 || imageTest.height > 2000);
+            const xxl = (imageTest.width > 3000 || imageTest.height > 3000);
+            const xxxl = (imageTest.width > 4000 || imageTest.height > 4000);
+
+            let scaleWrite =    xxxl ? 10 : 
+                                xxl ? 9 :
+                                xl ? 8 : 
+                                lg ? 6 : 
+                                4;
+            
+            const scaleBrush=   xxxl ?  10 : 
+                                xxl ?  8 :
+                                xl ?  7 : 
+                                lg ?  6 : 
+                                5;
+
+            setBrushSize(commonBrushSizesPt[scaleBrush]);
+            setWriteFontSize(commonFontSizesPt[scaleWrite]);
+        }
+    }, [imageSrc]);
+
+    const applyDraws = useCallback(() => {
         const editorCanvas = editorCanvasRef.current;
         const editorCtx = editorCanvas?.getContext('2d');
+        const pxBrushSize = getCanvasPtToPx(brushSize, zoom);
 
         if(!editorCanvas || !editorCtx) return;
 
@@ -293,7 +327,7 @@ const usePhotoEditor = ({
             editorCtx.save();
             editorCtx.lineCap = 'round';
             editorCtx.lineJoin = 'round';
-            editorCtx.lineWidth = brushSize;
+            editorCtx.lineWidth = pxBrushSize;
 
             if (drawTool === DRAW_TOOLS.ERASER) {
                 editorCtx.globalCompositeOperation = 'destination-out';
@@ -305,7 +339,7 @@ const usePhotoEditor = ({
 
             if (drawTool === DRAW_TOOLS.LINE && currentPath.length === 2) drawLineMove(editorCtx, currentPath);
             else if (drawTool === DRAW_TOOLS.CIRCLE && currentPath.length === 2) drawCircleMove(editorCtx, currentPath);
-            else if (drawTool === DRAW_TOOLS.ARROW && currentPath.length === 2) drawArrowMove(editorCtx, currentPath, brushSize, drawColor);
+            else if (drawTool === DRAW_TOOLS.ARROW && currentPath.length === 2) drawArrowMove(editorCtx, currentPath, pxBrushSize, drawColor);
             else if (drawTool === DRAW_TOOLS.PEN) drawPathMove(editorCtx, currentPath);
 
             editorCtx.restore();
@@ -323,7 +357,7 @@ const usePhotoEditor = ({
 
             editorCtx.restore();
         }); 
-    }, 25), [
+    }, [
         editorCanvasRef,
         drawings,
         isDrawing,
@@ -419,7 +453,7 @@ const usePhotoEditor = ({
                 applyDraws();
             }
         };
-    }, 100), [
+    }, 150), [
         imageSrc,
         imageCanvasRef,
         editorCanvasRef,
@@ -430,7 +464,7 @@ const usePhotoEditor = ({
         flipVertical,
         editorOffset,
         getFilterString,
-        applyDraws
+        // applyDraws
     ]);
 
     /**
@@ -614,13 +648,21 @@ const usePhotoEditor = ({
     /**
      * Handles the canvas image click and handle tools in canvas editor.
      */
-    const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
         const editorCanvas = editorCanvasRef.current;
         const editorCtx = editorCanvas?.getContext('2d');
 
         if(!editorCanvas || !editorCtx || action !== 'write') return; 
         
-        const pos = getMousePos(e, editorCanvasRef);
+        const pos = getMousePos(
+            e, 
+            editorCanvasRef, 
+            editorOffset, 
+            zoom, 
+            flipHorizontal, 
+            flipVertical,
+            rotate
+        );
         const idx = texts.findIndex((t) => isInsideWrite(pos, t, editorCtx));
 
         if (idx !== -1) {
@@ -648,14 +690,23 @@ const usePhotoEditor = ({
         if(!editorCanvas || !editorCtx || action !== 'write') return; 
 
         pushUndo();
+        const pos = getMousePos(
+            e, 
+            editorCanvasRef, 
+            editorOffset, 
+            zoom, 
+            flipHorizontal, 
+            flipVertical,
+            rotate
+        );
+        const pxWriteFontSize = getCanvasPtToPx(writeFontSize, zoom);
 
-        const pos = getMousePos(e, editorCanvasRef);
         const newText: TextItemProps = {
           text: labels.writeInitial,
           x: pos.x,
           y: pos.y,
           font: writeFont,
-          fontSize: writeFontSize,
+          fontSize: pxWriteFontSize,
           color: writeColor,
           rotation: 0,
           scale: 1,
@@ -665,7 +716,7 @@ const usePhotoEditor = ({
         setWriteText(labels.writeInitial);
         setWriteRotation(0);
         setWriteScale(1);
-        setWriteEditorPos({ x: pos.x + 10, y: pos.y + 10 });
+        setWriteEditorPos({ x: pos.x, y: pos.y});
         setSelectedIndex(texts.length);
     };
 
@@ -694,13 +745,22 @@ const usePhotoEditor = ({
     /**
      * Handles the pointer down event for initiating drawing or drag-and-drop panning.
      */
-    const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {        
         const editorCanvas = editorCanvasRef.current;
         const editorCtx = editorCanvas?.getContext('2d');
 
         if(!editorCanvas || !editorCtx) return; 
 
-        const pos = getMousePos(event, editorCanvasRef);
+        //This pos is ok, but got when if zoom or panning previous
+        const pos = getMousePos(
+            event, 
+            editorCanvasRef, 
+            editorOffset, 
+            zoom, 
+            flipHorizontal, 
+            flipVertical,
+            rotate
+        );
 
         if (action === MODES.DRAW) {
             pushUndo();
@@ -744,7 +804,15 @@ const usePhotoEditor = ({
 
         if(!editorCanvas || !editorCtx) return; 
 
-        const pos = getMousePos(event, editorCanvasRef);
+        const pos = getMousePos(
+            event, 
+            editorCanvasRef, 
+            editorOffset, 
+            zoom, 
+            flipHorizontal, 
+            flipVertical,
+            rotate
+        );
 
         if (action === MODES.DRAW && isDrawing) {
             if (drawTool === DRAW_TOOLS.LINE || drawTool === DRAW_TOOLS.ARROW || drawTool === DRAW_TOOLS.CIRCLE) {
@@ -771,7 +839,7 @@ const usePhotoEditor = ({
                 up[selectedIndex] = { ...up[selectedIndex], x: pos.x - dragOffset.x, y: pos.y - dragOffset.y };
                 return up;
             });
-            setWriteEditorPos({ x: pos.x + 10, y: pos.y + 10 });
+            setWriteEditorPos({ x: pos.x, y: pos.y});
         }
     };
 
@@ -788,6 +856,11 @@ const usePhotoEditor = ({
 
     const handlePointerOut = () => {
         handlePointerUp();
+        disableScrollLock();
+    }
+
+    const handlePointerEnter = () => {
+        enableScrollLock();
     }
 
     /**
@@ -804,35 +877,37 @@ const usePhotoEditor = ({
     };
 
     const finalizeDrawing = () => {
+        const pxBrushSize = getCanvasPtToPx(brushSize, zoom);
+
         if (!isDrawing) return;
 
         if (drawTool === DRAW_TOOLS.LINE && currentPath.length === 2) {
             setDrawings((prev) => [
                 ...prev,
-                { tool: DRAW_TOOLS.LINE, points: currentPath, color: drawColor, width: brushSize },
+                { tool: DRAW_TOOLS.LINE, points: currentPath, color: drawColor, width: pxBrushSize },
             ]);
         } else if (drawTool === DRAW_TOOLS.CIRCLE && currentPath.length === 2) {
             setDrawings((prev) => [
                 ...prev,
-                { tool: DRAW_TOOLS.CIRCLE, points: currentPath, color: drawColor, width: brushSize },
+                { tool: DRAW_TOOLS.CIRCLE, points: currentPath, color: drawColor, width: pxBrushSize },
             ]);
         } else if (drawTool === DRAW_TOOLS.ARROW && currentPath.length === 2) {
             setDrawings((prev) => [
                 ...prev,
-                { tool: DRAW_TOOLS.ARROW, points: currentPath, color: drawColor, width: brushSize },
+                { tool: DRAW_TOOLS.ARROW, points: currentPath, color: drawColor, width: pxBrushSize },
             ]);
         } else if (drawTool === DRAW_TOOLS.ERASER) {
             if (currentPath.length > 1){
                 setDrawings((prev) => [
                     ...prev,
-                    { tool: DRAW_TOOLS.ERASER, points: currentPath, width: brushSize, erase: true },
+                    { tool: DRAW_TOOLS.ERASER, points: currentPath, width: pxBrushSize, erase: true },
                 ]);
             }
         } else if (drawTool === DRAW_TOOLS.PEN) {
             if (currentPath.length > 1){
                 setDrawings((prev) => [
                     ...prev,
-                    { tool: DRAW_TOOLS.PEN, points: currentPath, color: drawColor, width: brushSize },
+                    { tool: DRAW_TOOLS.PEN, points: currentPath, color: drawColor, width: pxBrushSize },
                 ]);
             }
         }
@@ -874,17 +949,19 @@ const usePhotoEditor = ({
         resetFilters();
 
         setEditorOffset(initialCords);
+        setRedoStack([]);
+        setUndoStack([]);
+        
         setIsDragging(false);
         setIsDrawing(false);
-        setAction(MODES.DRAW);
-        setUndoStack([]);
-        setRedoStack([]);
-
-        setDrawTool(DRAW_TOOLS.PEN);
+        
         setDrawings([]);
         setTexts([]);
         setPans([]);
         setFilters([]);
+
+        setAction(MODES.DRAW);
+        setDrawTool(DRAW_TOOLS.PEN);
     }
 
     // Expose the necessary state and handlers for external use.
@@ -1006,8 +1083,8 @@ const usePhotoEditor = ({
         handleUndo,
         /** Function to handle zoom redo. */
         handleRedo,
-        /** Function to handle canvas click. */
-        handleCanvasClick,
+        /** Function to handle canvaas click. */
+        handleClick,
         /** Function to handle canvas double click. */
         handleDoubleClick,
         /** Function to handle canvas pointer down. */
@@ -1018,6 +1095,8 @@ const usePhotoEditor = ({
         handlePointerUp,
         /** Function to handle canvas pointer out. */
         handlePointerOut,
+        /** Function to handle canvas pointer in. */
+        handlePointerEnter,
         /** Function to handle canvas wheel. */
         handleWheel,
         /** Function to handle zoom in. */
