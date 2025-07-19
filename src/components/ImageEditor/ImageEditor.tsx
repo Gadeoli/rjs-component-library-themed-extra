@@ -4,7 +4,7 @@ import { useTheme } from '../ThemeHandler';
 import { handleCssClassnames } from '@gadeoli/js-helpers-library';
 import styled from 'styled-components';
 import usePhotoEditor from './usePhotoEditor';
-import { margin, transparentize } from 'polished';
+import { transparentize } from 'polished';
 import { 
     Container,
     Range, 
@@ -165,7 +165,10 @@ const ImageEditor: FC<DefaultProps> = ({
                 
                 onWheel={handleWheel}
 
-                onClick={handleClick}
+                onClick={(e) => {
+                    handleClick(e);
+                    setShowSubActions(false);
+                }}
                 onDoubleClick={handleDoubleClick}
 
                 style={{
