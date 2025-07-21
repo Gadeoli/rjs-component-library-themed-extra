@@ -4,7 +4,8 @@
 
 ## Components
 
-ImageEditor  
+ImageEditor (Not exported yet) - same from react-canvas-editor with some extra action included by chatgpt (need to fix somos modes and drawTools and history stacks)  
+CanvasEditor (Not exported yet) - 99% Chat GPT code  (need almost full implementation) - Canvas editor try to fix ImageEditor react state changes overloads  
 
 ## Sources
 
