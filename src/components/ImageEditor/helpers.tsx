@@ -2,6 +2,7 @@ import { TranslationsProps } from "./ImageEditor.types";
 import { DrawingItemProps, PointProps, TextItemProps } from "./usePhotoEditor.types";
 
 export const WRAP_WIDTH = 200;
+
 export const initialCords = {x: 0, y: 0};
 export enum MODES {
     DRAW='draw',
@@ -15,8 +16,85 @@ export enum DRAW_TOOLS {
     ARROW='arrow',
     ERASER='eraser'
 }
+
+export enum FILTERS {
+    BRIGHTNESS = 'brightness',
+    CONTRAST = 'contrast',
+    SATURATE = 'saturate',
+    GRAYSCALE = 'grayscale',
+    FLIPHORIZONTAL = 'flipHorizontal',
+    FLIPVERTICAL = 'flipVertical',
+    ZOOM = 'zoom',
+    ROTATE = 'rotate',
+}
+
+//dont change the order (right order small to bigger)
+export enum CANVAS_SIZES {
+    SM=400,
+    MD=800,
+    LG=1280,
+    XL=2000,
+    XXL=3000,
+    XXXL=3400,
+};
+
+export const commonWrapWidth = [200, 400, 600];
 export const commonFontSizesPt = [8, 10, 12, 14, 16, 18, 24, 36, 48, 72, 144];
 export const commonBrushSizesPt = [1, 2, 3, 5, 7, 10, 15, 20, 25, 50, 75, 100, 125];
+
+export const getBestWrapWidth = (canvasWidth : number | null) : number => {
+    if(!canvasWidth){
+        return 200;
+    }else if(canvasWidth >= CANVAS_SIZES.XXXL){
+        return 500;
+    }else if(canvasWidth >= CANVAS_SIZES.XXL){
+        return 400;
+    }else if(canvasWidth >= CANVAS_SIZES.XL){
+        return 300;
+    }else{
+        return 200;
+    }
+}
+
+export const getBestFontSizesPt = (biggerCanvasSize : number | null) : number => {
+    let index = 5;
+
+    if(!biggerCanvasSize){
+        index = 4;
+    }else if(biggerCanvasSize >= CANVAS_SIZES.XXXL){
+        index = 10;
+    }else if(biggerCanvasSize >= CANVAS_SIZES.XXL){
+        index = 9;
+    }else if(biggerCanvasSize >= CANVAS_SIZES.XXL){
+        index = 8;
+    }else if(biggerCanvasSize >= CANVAS_SIZES.LG){
+        index = 6;
+    }else{
+        index = 4;
+    }
+
+    return commonFontSizesPt[index];
+}
+
+export const getBestBrushSizePt = (biggerCanvasSize : number | null) : number => {
+    let index = 5; 
+
+    if(!biggerCanvasSize){
+        index = 5;
+    }else if (biggerCanvasSize >= CANVAS_SIZES.XXXL){
+        index = 10;
+    }else if (biggerCanvasSize >= CANVAS_SIZES.XXL){
+        index = 8;
+    }else if (biggerCanvasSize >= CANVAS_SIZES.XL){
+        index = 6;
+    }else if (biggerCanvasSize >= CANVAS_SIZES.LG){
+        index = 5;
+    }else{
+        index = 5;
+    }
+
+    return commonBrushSizesPt[index];
+}
 
 export const getLines = (context: CanvasRenderingContext2D, txt: string, fnt: string) => {
     context.font = fnt;
@@ -54,9 +132,8 @@ export const getMetrics = (t: TextItemProps, ctx: CanvasRenderingContext2D) => {
 
 export const ptToPx = (pt: number): number => pt * (96 / 72);
 
-export const getCanvasPtToPx = (ptSize: number, zoom: number): number => {
-    const basePx = ptToPx(ptSize);
-    return basePx * zoom; // adjust for canvas scale
+export const getCanvasPtToPx = (ptSize: number): number => {
+    return ptToPx(ptSize);
 };
 
 export const isInsideWrite = (pos: PointProps, t: TextItemProps, ctx: CanvasRenderingContext2D) => {
@@ -341,7 +418,7 @@ export const labels : TranslationsProps = {
     grayscale: {txt: 'Grayscale'},
     horizontal: {txt: 'Horizontally'},
     line: {txt: 'Line'},
-    pan: {txt: 'Pan & Zoom'}, //Mover / Arrastar
+    pan: {txt: 'Pan'}, //Mover / Arrastar
     pen: {txt: 'Pen'},
     reset: {txt: 'Reset'},
     rotate: {txt: 'Rotate'},

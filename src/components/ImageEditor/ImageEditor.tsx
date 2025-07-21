@@ -22,7 +22,7 @@ import {
     defaultXPM,
     defaultYPM
 } from '@gadeoli/rjs-component-library-themed';
-import { labels as defaultLabels } from './helpers';
+import { labels as defaultLabels, FILTERS } from './helpers';
 
 const ImageEditor: FC<DefaultProps> = ({
     src,
@@ -59,6 +59,7 @@ const ImageEditor: FC<DefaultProps> = ({
         cursor,
         canRedo,
         canUndo,
+        canUnPanning,
 
         //Filters
         brightness,
@@ -73,14 +74,10 @@ const ImageEditor: FC<DefaultProps> = ({
         setAction,
         generateEditedImage,
         resetEditor,
+        resetPanning,
 
         //Filters
-        setBrightness,
-        setContrast,
-        setSaturate,
-        setGrayscale,
-        setRotate,
-        setZoom,
+        setFilterValue,
 
         //Handlers
         handlePointerDown,
@@ -96,12 +93,12 @@ const ImageEditor: FC<DefaultProps> = ({
     } = usePhotoEditorProps;
 
     const rangeActions = useMemo(() => [
-        {name: 'brightness', value: brightness, min: 0, max: 200, step: 1, onChange: (v: number) => setBrightness(v)},
-        {name: 'contrast', value: contrast, min: 0, max: 200, step: 1, onChange: (v: number) => setContrast(v)},
-        {name: 'saturate', value: saturate, min: 0, max: 200, step: 1, onChange: (v: number) => setSaturate(v)},
-        {name: 'grayscale', value: grayscale, min: 0, max: 100, step: 1, onChange: (v: number) => setGrayscale(v)},
-        {name: 'rotate', value: rotate, min: 0, max: 360, step: 1, onChange: (v: number) => setRotate(v)},
-        {name: 'zoom', value: zoom, min: 0.1, max: 3, step: 0.1, onChange: (v: number) => setZoom(v)}
+        {name: 'brightness', value: brightness, min: 0, max: 200, step: 1, onChange: (v: number) => setFilterValue(v, FILTERS.BRIGHTNESS)},
+        {name: 'contrast', value: contrast, min: 0, max: 200, step: 1, onChange: (v: number) => setFilterValue(v, FILTERS.CONTRAST)},
+        {name: 'saturate', value: saturate, min: 0, max: 200, step: 1, onChange: (v: number) => setFilterValue(v, FILTERS.SATURATE)},
+        {name: 'grayscale', value: grayscale, min: 0, max: 100, step: 1, onChange: (v: number) => setFilterValue(v, FILTERS.GRAYSCALE)},
+        {name: 'rotate', value: rotate, min: 0, max: 360, step: 1, onChange: (v: number) => setFilterValue(v, FILTERS.ROTATE)},
+        {name: 'zoom', value: zoom, min: 0.1, max: 3, step: 0.1, onChange: (v: number) => setFilterValue(v, FILTERS.ZOOM)},
     ], [
         brightness,
         contrast,
@@ -270,6 +267,14 @@ const ImageEditor: FC<DefaultProps> = ({
                     setShowSubActions(false);
                 }}>
                     &#8631;
+                </Button>
+            </Action> 
+
+            <Action>
+                <Button disabled={!canUnPanning} onClick={() => {
+                    resetPanning();
+                }}>
+                    &#9635;
                 </Button>
             </Action>              
             

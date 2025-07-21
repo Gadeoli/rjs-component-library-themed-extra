@@ -75,7 +75,7 @@
   },
   "peerDependencies": {
     "@gadeoli/js-helpers-library": ">=0.2.0",
-    "@gadeoli/rjs-hooks-library": ">=0.2.0",
+    "@gadeoli/rjs-hooks-library": ">=0.2.1",
     "@gadeoli/rjs-component-library-themed": ">=0.2.22",    
     "polished": "^4.3.1",
     "react": ">=18.3.0",

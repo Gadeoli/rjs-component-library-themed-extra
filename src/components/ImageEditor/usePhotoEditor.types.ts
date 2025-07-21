@@ -1,19 +1,21 @@
 export interface DefaultProps {
     src?: string;
-    scales?: ScalesProps;
-    positions?: PositionsProps;
+    values?: {
+        filters: FiltersProps;
+        scales: ScalesProps;
+    }
     actions?: ActionsProps;
     labels?: LabelsProps; 
 };
 
-interface ScalesProps {
+interface FiltersProps {
     brightness: number;
     contrast: number;
     saturate: number;
     grayscale: number;
 };
 
-interface PositionsProps {
+interface ScalesProps {
     flipHorizontal: boolean;
     flipVertical: boolean;
     zoom: number;
@@ -61,6 +63,7 @@ export interface PansItemProps {
 
 export interface UndoRedoItemProps {
     filters: string[];
+    scales: string[];
     texts: TextItemProps[];
     drawings: DrawingItemProps[];
     pans: PansItemProps[];
