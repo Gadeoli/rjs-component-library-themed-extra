@@ -6,11 +6,16 @@ type CanvasRefs = Record<CanvasLayers, React.RefObject<HTMLCanvasElement | null>
 export type CanvasContexts = Record<CanvasLayers, CanvasRenderingContext2D | null>;
 
 export function useCanvasLayerRefs(containerRef: React.RefObject<HTMLElement | null>) {
+    const backgroundRef = useRef<HTMLCanvasElement | null>(null);
+    const drawingsRef = useRef<HTMLCanvasElement | null>(null);
+    const textsRef = useRef<HTMLCanvasElement | null>(null);
+    const interactionsRef = useRef<HTMLCanvasElement | null>(null);
+
     const canvasRefs: CanvasRefs = useMemo(() => ({
-        background: useRef<HTMLCanvasElement | null>(null),
-        drawings: useRef<HTMLCanvasElement | null>(null),
-        texts: useRef<HTMLCanvasElement | null>(null),
-        interactions: useRef<HTMLCanvasElement | null>(null),
+        background: backgroundRef,
+        drawings: drawingsRef,
+        texts: textsRef,
+        interactions: interactionsRef,
     }), []);
 
     const [contexts, setContexts] = useState<CanvasContexts>({
@@ -25,7 +30,6 @@ export function useCanvasLayerRefs(containerRef: React.RefObject<HTMLElement | n
         const container = containerRef.current;
         
         if (!container) return;
-
             const { width, height } = container.getBoundingClientRect();
 
             for (const key of Object.keys(canvasRefs) as CanvasLayers[]) {

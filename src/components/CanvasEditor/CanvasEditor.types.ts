@@ -47,7 +47,7 @@ export interface ExportToImageProps {
 };
 
 export interface TranslationsProps {
-    
+    draw: LabelProps
 }
 
 export interface LabelProps {

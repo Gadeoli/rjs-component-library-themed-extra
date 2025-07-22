@@ -32,9 +32,3 @@ export type Command = {
     undo: (state: EditorState) => EditorState;
     affectedLayers: ("background" | "drawings" | "texts")[] | "all";
 }
-
-export enum MODES {
-    DRAW='draw',
-    // PAN='pan',
-    // WRITE='write',
-}

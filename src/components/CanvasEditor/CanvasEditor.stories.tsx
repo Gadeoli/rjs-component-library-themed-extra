@@ -104,7 +104,11 @@ export const Default: Story = {
                 }
             }}/>
 
-            <CanvasEditor {...{...args, backgroundSrc: bgSource}} onExportToImage={(props : any) => setSavedSrc(props.src)}/>
+            <CanvasEditor 
+                {...{...args, backgroundSrc: bgSource}} 
+                onExportToImage={(props : any) => setSavedSrc(props.src)}
+                style={{height: '500px'}}    
+            />
 
             <img src={savedSrc} alt='saved img - preview' style={{width: '300px', marginTop: '40px'}}/>
         </div>)
