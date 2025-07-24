@@ -4,7 +4,9 @@
 
 ## Components
 
-ImageEditor  
+ImageEditor (React state based) (Not exported) - same from react-canvas-editor with some extra action/tools included by chatgpt. There are several problems, multiple are related to bad state control.   
+
+CanvasEditor (React ref based) (Not exported) - Most code are from GPT - Canvas editor try to fix ImageEditor react state changes overloads    
 
 ## Sources
 
