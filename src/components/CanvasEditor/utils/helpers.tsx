@@ -1,6 +1,6 @@
 import uuid from "../../../helpers/uuid";
 import { CanvasContexts } from "../hooks/useCanvasLayerRefs";
-import { DrawSettings } from "../hooks/useDrawSettings";
+import { DRAW_TOOLS, DrawSettings } from "../hooks/useDrawSettings";
 import { Command, DrawingObject, EditorState, Point, TextObject } from "../hooks/useEditorEngine.types";
 
 export const initialPoint = {x: 0, y: 0};
@@ -33,7 +33,15 @@ export const renderDrawingsLayer = (state: EditorState, ctx: CanvasRenderingCont
 
     for (const obj of state.objects) {
         if (obj.type === "drawing") {
-            drawPathObject(ctx, obj);
+            if([DRAW_TOOLS.PEN, DRAW_TOOLS.ERASER].includes(obj.tool)){
+                drawPathObject(ctx, obj);
+            }else if(obj.tool === DRAW_TOOLS.LINE){
+                drawLine(ctx, obj);
+            }else if(obj.tool === DRAW_TOOLS.ARROW){
+                drawArrow(ctx, obj);
+            }else if(obj.tool === DRAW_TOOLS.CIRCLE){
+                drawCircle(ctx, obj);
+            }
         }
     }
 }
@@ -66,16 +74,16 @@ export const addDrawingCommand = (drawing: DrawingObject) : Command => {
 }
 
 const drawPathObject = (ctx: CanvasRenderingContext2D, obj: DrawingObject) => {
-    if (obj.points.length < 2) return;
+    const { points } = obj;
+
+    if (points.length < 2) return;
 
     ctx.beginPath();
-    ctx.lineWidth = obj.brushSize;
-    ctx.strokeStyle = obj.color;
-    ctx.lineCap = 'round';
-    ctx.moveTo(obj.points[0].x, obj.points[0].y);
+    styleCtx(ctx, obj);
+    ctx.moveTo(points[0].x, points[0].y);
 
     for (let i = 1; i < obj.points.length; i++) {
-        ctx.lineTo(obj.points[i].x, obj.points[i].y);
+        ctx.lineTo(points[i].x, points[i].y);
     }
 
     ctx.stroke();
@@ -90,24 +98,21 @@ export const drawTextObject = (ctx: CanvasRenderingContext2D, obj: TextObject) =
 
 export const drawStroke = (
     ctx: CanvasRenderingContext2D,
-    points: Point[],
-    options: DrawSettings
+    obj: Partial<DrawingObject>
 ) => {
+    const { points } = obj;
+
+    if(!points) return;
+
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
     ctx.save();
-
-    ctx.strokeStyle = options.color;
-    ctx.fillStyle = options.color;
-    ctx.lineWidth = options.size;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
+    styleCtx(ctx, obj);
 
     if (points.length === 1) {
         // Just a dot
         ctx.beginPath();
-        ctx.arc(points[0].x, points[0].y, options.size / 2, 0, Math.PI * 2);
-        ctx.fillStyle = options.color;
+        ctx.arc(points[0].x, points[0].y, ctx.lineWidth / 2, 0, Math.PI * 2);
         ctx.fill();
     } else if (points.length > 1) {
         ctx.beginPath();
@@ -121,6 +126,140 @@ export const drawStroke = (
     ctx.restore();
 }
 
+export const drawLine = (
+    ctx: CanvasRenderingContext2D,
+    obj: Partial<DrawingObject>
+) => {
+    const { points } = obj;
+
+    if(!points) return;
+
+    const [p0, p1] = points;
+
+    ctx.beginPath();
+    styleCtx(ctx, obj);
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(p1.x, p1.y);
+    ctx.stroke();
+}
+
+export const drawCircle = (
+    ctx: CanvasRenderingContext2D,
+    obj: Partial<DrawingObject>
+) => {
+    const { points } = obj;
+
+    if(!points) return;
+
+    const [center, edge] = points;
+    const radius = Math.hypot(edge.x - center.x, edge.y - center.y);
+    
+    ctx.beginPath();
+    styleCtx(ctx, obj);
+    ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+}
+
+export const drawArrow = (
+    ctx: CanvasRenderingContext2D,
+    obj: Partial<DrawingObject>
+) => {
+    const { points } = obj;
+
+    if(!points) return;
+
+    styleCtx(ctx, obj);
+
+    const [p0, p1] = points;
+    const headSize = 8 + ctx.lineWidth * 1.5;
+
+    // Calculate unit direction vector from p0 to p1
+    const dx = p1.x - p0.x;
+    const dy = p1.y - p0.y;
+    const length = Math.hypot(dx, dy);
+
+    const unitX = dx / length;
+    const unitY = dy / length;
+
+    // Trimmed end of the shaft (p1 shifted back by headSize)
+    const shaftEnd = {
+        x: p1.x - unitX * headSize,
+        y: p1.y - unitY * headSize,
+    };
+
+    // Draw the shaft
+    ctx.beginPath();
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(shaftEnd.x, shaftEnd.y);
+    ctx.stroke();
+
+    // Compute arrowhead based on shaftEnd → p1 direction
+    const [left, right, tip] = drawArrowHead(shaftEnd, p1, headSize, ctx.lineWidth);
+
+    // Draw the arrowhead
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(left.x, left.y);
+    ctx.lineTo(right.x, right.y);
+    ctx.closePath();
+    ctx.fill();
+}
+
+export const drawArrowHead = (
+    p0: Point,
+    p1: Point,
+    size: number,
+    strokeWidth: number = 1
+): [Point, Point, Point] => {
+    const angle = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+
+    // Ensure arrowhead is wide enough relative to line thickness
+    const headLength = size;
+    const headWidth = Math.max(size * 1.5, strokeWidth * 2.5); // ensures visible triangle
+
+    const sin = Math.sin(angle);
+    const cos = Math.cos(angle);
+
+    // Arrowhead tip is at p1
+    const tip = { x: p1.x, y: p1.y };
+
+    const left = {
+        x: p1.x - headLength * cos + (headWidth / 2) * sin,
+        y: p1.y - headLength * sin - (headWidth / 2) * cos,
+    };
+
+    const right = {
+        x: p1.x - headLength * cos - (headWidth / 2) * sin,
+        y: p1.y - headLength * sin + (headWidth / 2) * cos,
+    };
+
+    return [left, right, tip];
+};
+
+export const styleCtx = (
+    ctx: CanvasRenderingContext2D,
+    obj: Partial<DrawingObject>
+) => {
+    const {
+        color,
+        brushSize,
+        erase
+    } = obj;
+
+    if(erase){
+        ctx.strokeStyle = 'rgba(0,0,0,1)';
+        ctx.globalCompositeOperation = 'destination-out';
+    }else{
+        ctx.strokeStyle = color || '#000000';
+        ctx.fillStyle = color || '#000000';
+        ctx.globalCompositeOperation = 'source-over';
+    }
+
+    ctx.lineWidth = brushSize || 4;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+}
+
 export const clearLayer = (
     ctx: CanvasRenderingContext2D
 ) => {
@@ -129,7 +268,17 @@ export const clearLayer = (
 }
 
 export const defaultLabels = {
-    draw: {txt: 'Draw'}
+    arrow: {txt: 'Arrow'},
+    circle: {txt: 'Circle'},
+    draw: {txt: 'Draw'},
+    settings: {txt: 'Tools'},
+    eraser: {txt: 'Eraser'},
+    line: {txt: 'Line'},
+    pen: {txt: 'Pen'},
+    redo: {txt: 'Redo'},
+    restore: {txt: 'Restore'},
+    shapes: {txt: 'Shapes'},
+    undo: {txt: 'Undo'}
 }
 
 export const getMousePos = (

@@ -23,18 +23,18 @@ const useActionSettings = (initial?: Partial<ActionSettings>) => {
         ...initial,
     };
 
-    const [actionState, setActionState] = useState<ActionSettings>(defaultSettings);
+    const [uiState, setUiState] = useState<ActionSettings>(defaultSettings);
     const ref = useRef<ActionSettings>(defaultSettings);
 
     const update = useCallback((settings: Partial<ActionSettings>) => {
         const newPointer =  settings.mode === MODES.DRAW ? 'crosshair' : 'default';
         ref.current = { ...ref.current, ...settings, pointer: newPointer};
-        setActionState((prev) => ({ ...prev, ...settings, pointer: newPointer}));
+        setUiState((prev) => ({ ...prev, ...settings, pointer: newPointer}));
     }, []);
 
     return {
         ref,
-        action: actionState,
+        ui: uiState,
         update,
     };
 }

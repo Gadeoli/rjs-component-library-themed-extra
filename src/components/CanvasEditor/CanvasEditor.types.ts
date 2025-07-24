@@ -1,10 +1,19 @@
 export interface DefaultProps {
-    type: 'free-editor' | 'image-editor',
+    /**
+     * free-editor is more like ms paint (no image filters)
+     * image-editor is a editor that reacts/custom a given image
+     */
+    type: 'free-editor' | 'image-editor';
 
     /**
      * The image source.
      */
     backgroundSrc?: string | undefined;
+
+    /**
+     * The canvas height. Default: '500px'
+     */
+    height?: string;
 
     /**
      * Function invoked when the edited image is saved.
@@ -47,7 +56,17 @@ export interface ExportToImageProps {
 };
 
 export interface TranslationsProps {
-    draw: LabelProps
+    arrow: LabelProps,
+    circle: LabelProps,
+    draw: LabelProps,
+    redo: LabelProps,
+    restore: LabelProps,
+    settings: LabelProps,
+    eraser: LabelProps,
+    line: LabelProps,
+    pen: LabelProps,
+    shapes: LabelProps,
+    undo: LabelProps,
 }
 
 export interface LabelProps {

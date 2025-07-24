@@ -15,13 +15,13 @@ export default meta;
 
 type Story = StoryObj<StoryProps>;
 
-export const Default: Story = {
+export const DefaultImageEditor: Story = {
     args: {
         testSrcUrl: "",
         onExportToImage: ({src, e}) => console.log({src, e}),
         loading: false,
         className: "",
-        type: "free-editor",
+
         style: {}
         /*
         labels = {
@@ -104,13 +104,71 @@ export const Default: Story = {
                 }
             }}/>
 
-            <CanvasEditor 
-                {...{...args, backgroundSrc: bgSource}} 
-                onExportToImage={(props : any) => setSavedSrc(props.src)}
-                style={{height: '500px'}}    
-            />
+            <CanvasEditor {...{...args, backgroundSrc: bgSource}} onExportToImage={(props : any) => setSavedSrc(props.src)}/>
 
             <img src={savedSrc} alt='saved img - preview' style={{width: '300px', marginTop: '40px'}}/>
+        </div>)
+    }
+};
+
+export const DefaultEditor: Story = {
+    args: {
+        testSrcUrl: "",
+        onExportToImage: ({src, e}) => console.log({src, e}),
+        loading: false,
+        className: "",
+        type: "free-editor",
+        style: {}
+        /*
+        labels = {
+            ...
+        }
+        */,
+
+        backgroundSrc: ''
+    },
+    argTypes: {
+        testSrcUrl: {
+            type: {name: 'string', required: false},
+        },
+        backgroundSrc: {
+            description: 'img src'
+        },
+        onExportToImage: {
+            description: 'function to run on onchange event. this will recieve the event'
+        },
+        labels: {
+            
+        },
+        loading: {
+            type: {name: 'boolean', required: false},
+            defaultValue: false,
+            description: 'Loading effect, if true add a class: loading-effect to component'
+        },
+        className: {
+            type: {name: 'string', required: false},
+            defaultValue: '',
+            description: 'full;'
+        },
+        style: {
+            table: { type: { summary: 'any'} },
+            defaultValue: null,
+            description: 'custom styles. This field is not required'
+        }    
+    },
+    render: ({testSrcUrl, ...args}) => {
+        const [savedSrc, setSavedSrc] = useState<string | undefined>('');
+
+        return (<div>
+            <CanvasEditor 
+                {...{...args}} 
+                onExportToImage={(props : any) => setSavedSrc(props.src)}
+                // height='500px'
+            />
+
+            <div style={{marginTop: '40px'}}>
+                <img src={savedSrc} alt='saved img - preview' style={{width: '300px'}}/>
+            </div>
         </div>)
     }
 };

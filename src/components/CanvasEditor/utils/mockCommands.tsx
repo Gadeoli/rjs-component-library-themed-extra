@@ -1,10 +1,12 @@
 import uuid from "../../../helpers/uuid";
+import { DRAW_TOOLS } from "../hooks/useDrawSettings";
 import { DrawingObject } from "../hooks/useEditorEngine.types";
 
 export const strokes : DrawingObject[] = [
     {
         id: uuid(),
         type: "drawing",
+        tool: DRAW_TOOLS.PEN,
         points: [
             { x: 50, y: 50 },
             { x: 100, y: 100 },
@@ -12,5 +14,6 @@ export const strokes : DrawingObject[] = [
         ],
         color: "black",
         brushSize: 3,
+        erase: false
     }
 ];

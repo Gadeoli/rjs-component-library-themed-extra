@@ -1,11 +1,15 @@
+import { Tool } from "./useDrawSettings";
+
 export type Point = { x: number; y: number };
 
 export type DrawingObject = {
     id: string;
     type: 'drawing';
+    tool: Tool;
     points: Point[];
     color: string;
     brushSize: number;
+    erase: boolean;
 };
 
 export type TextObject = {

@@ -10,6 +10,9 @@ import {
 import { 
     addDrawingCommand,
     clearLayer,
+    drawArrow,
+    drawCircle,
+    drawLine,
     drawStroke,
     getMousePos,
     renderEditorState 
@@ -19,7 +22,7 @@ import createEditorEngine from "../utils/engine";
 import { EditorEngine } from "../utils/engine.types";
 import useCurrentPath from "./useCurrentPath";
 import uuid from "../../../helpers/uuid";
-import useDrawSettings, { Tool } from "./useDrawSettings";
+import useDrawSettings, { DRAW_TOOLS, DrawSettings, Tool } from "./useDrawSettings";
 import useActionSettings, { Mode, MODES } from "./useActionSettings";
 
 const useEditorEngine = (initialState : EditorState) => {
@@ -65,6 +68,11 @@ const useEditorEngine = (initialState : EditorState) => {
         forceUpdate((v) => v + 1);
     }, []);
 
+    const reset = useCallback(() => {
+        engineRef.current!.reset();
+        forceUpdate((v) => v + 1);
+    }, []);
+
     const handlePointerDown = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {        
         const canvasRef = canvasRefs.interactions;
         const ctx = contexts.interactions;
@@ -72,15 +80,25 @@ const useEditorEngine = (initialState : EditorState) => {
         if(canvasRef && ctx){
             if(mode === MODES.DRAW){
                 const mousePos = getMousePos(event, canvasRef);
-                
+                const tool = drawSettings.ref.current.tool;
+                const isErase = DRAW_TOOLS.ERASER === tool;
+
                 currentPath.push(mousePos);
 
-                actionSettings.update({...actionSettings, isDrawing: true});
-                
-                drawStroke(ctx, currentPath.paths.current, drawSettings.ui);
+                actionSettings.update({isDrawing: true});
+                drawSettings.update({erase: isErase ? true : false});
+
+                //only pen has the first point in the canvas
+                if([DRAW_TOOLS.PEN, DRAW_TOOLS.ERASER].includes(tool)){
+                    drawStroke(ctx, {
+                        points: currentPath.paths.current, 
+                        ...drawSettings.ref.current,
+                        erase: isErase,
+                    });
+                }
             }
         }
-    }, [mode, contexts]);
+    }, [mode, drawSettings, contexts]);
 
     const handlePointerMove = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {        
         const canvasRef = canvasRefs.interactions;
@@ -89,13 +107,44 @@ const useEditorEngine = (initialState : EditorState) => {
         if(canvasRef && ctx){
             if(mode === MODES.DRAW && isDrawing && isInside){
                 const mousePos = getMousePos(event, canvasRef);
-                
-                currentPath.push(mousePos);
-                
-                drawStroke(ctx, currentPath.paths.current, drawSettings.ui);
+                const tool = drawSettings.ref.current.tool;
+                const stgs = {
+                    points: currentPath.paths.current,
+                    ...drawSettings.ref.current
+                };
+
+                if([DRAW_TOOLS.PEN, DRAW_TOOLS.ERASER].includes(tool)){
+                    currentPath.push(mousePos);
+                    drawStroke(ctx, {...stgs, erase: DRAW_TOOLS.ERASER === tool});
+                }else if([
+                    DRAW_TOOLS.LINE, 
+                    DRAW_TOOLS.ARROW, 
+                    DRAW_TOOLS.CIRCLE
+                ].includes(tool)){
+                    if(currentPath.paths.current.length > 0){
+                        currentPath.set([
+                            currentPath.paths.current[0],
+                            mousePos
+                        ])
+                    }else{
+                        currentPath.push(mousePos);
+                    }
+
+                    //If you don't clear the ctx is possible to create a multi-drawTool effect
+                    //very interesting for a future tool
+                    clearLayer(ctx);
+
+                    if(tool === DRAW_TOOLS.LINE){
+                        drawLine(ctx, stgs)
+                    }else if(tool === DRAW_TOOLS.ARROW){
+                        drawArrow(ctx, stgs)
+                    }else if(tool === DRAW_TOOLS.CIRCLE){
+                        drawCircle(ctx, stgs)
+                    }
+                }
             }
         }
-    }, [mode, isDrawing]);
+    }, [mode, drawSettings, isDrawing]);
 
     const handlePointerUp = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {        
             const canvasRef = canvasRefs.interactions;
@@ -104,51 +153,55 @@ const useEditorEngine = (initialState : EditorState) => {
             if(canvasRef && ctx){
                 if(mode === MODES.DRAW && isDrawing){
                     const mousePos = getMousePos(event, canvasRef);
-                    
                     currentPath.push(mousePos);
 
                     dispatch(addDrawingCommand({
                         id: uuid(),
-                        type: "drawing",
+                        type: 'drawing',
                         points: currentPath.paths.current,
-                        color: drawSettings.ref.current.tool,
-                        brushSize: drawSettings.ref.current.size,
+                        ...drawSettings.ref.current
                     }));
 
                     currentPath.reset();
 
                     clearLayer(ctx);
 
-                    actionSettings.update({...actionSettings, isDrawing: false});
+                    actionSettings.update({isDrawing: false});
                 }
             }
     }, [mode, isDrawing]);
 
     const handlePointerOut = (event: React.PointerEvent<HTMLCanvasElement>) => {        
-        actionSettings.update({...actionSettings, isInside: false});
+        actionSettings.update({isInside: false});
     }
 
     const handlePointerEnter = (event: React.PointerEvent<HTMLCanvasElement>) => {        
-        actionSettings.update({...actionSettings, isInside: true});
+        actionSettings.update({isInside: true});
     }
 
     //UI Setters
-    const setMode = (mode: Mode) => actionSettings.update({...actionSettings.action, mode: mode}); 
-    const setDrawTool = (tool: Tool) => drawSettings.update({...drawSettings.ui, tool: tool});
+    const setMode = (mode: Mode) => actionSettings.update({mode: mode}); 
+    const setDrawTool = (tool: Tool) => drawSettings.update({tool: tool});
 
     return {
         containerRef,
         canvasRefs,
         contexts,
-        mode: actionSettings.action.mode,
+        mode: actionSettings.ui.mode,
+        pointer: actionSettings.ui.pointer,
         drawTool: drawSettings.ui.tool,
-        pointer: actionSettings.action.pointer,
+        drawPallete: drawSettings.ui,
+        canUndo: engineRef.current!.canUndo(),
+        canRedo: engineRef.current!.canRedo(),
+        canReset: engineRef.current!.canReset(),
 
         setMode,
         setDrawTool,
+        setDrawPallete: (stg : Partial<DrawSettings>) => drawSettings.update(stg),
         dispatch,
         undo,
         redo,
+        reset,
         render,
         getState: () => engineRef.current!.getState(),
         

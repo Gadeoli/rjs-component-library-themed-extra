@@ -8,6 +8,10 @@ const createEditorEngine = (initialState: EditorState): EditorEngine => {
     const redoStack: Command[] = [];
 
     return {
+        canUndo: () => undoStack.length > 0,
+        canRedo: () => redoStack.length > 0,
+        canReset: () => current.objects.length > 0,
+        
         getState: () => current,
 
         dispatch: (cmd: Command) => {
@@ -35,6 +39,12 @@ const createEditorEngine = (initialState: EditorState): EditorEngine => {
             
             current = cmd.apply(current);
         },
+
+        reset: () => {
+            undoStack.length = 0;
+            redoStack.length = 0;
+            current = initialState;
+        }
     }; 
 }
 

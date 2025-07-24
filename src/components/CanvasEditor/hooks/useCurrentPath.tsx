@@ -16,8 +16,13 @@ const useCurrentPath = (initialPaths : Point[] = []) => {
         currentPath.current = initialPaths;
     }
 
+    const set = (points: Point[]) => {
+        currentPath.current = points;
+    }
+
     return {
         paths: currentPath,
+        set,
         push,
         merge,
         reset

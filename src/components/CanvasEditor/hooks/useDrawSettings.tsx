@@ -12,15 +12,17 @@ export type Tool = DRAW_TOOLS.PEN | DRAW_TOOLS.LINE | DRAW_TOOLS.CIRCLE | DRAW_T
 
 export interface DrawSettings {
     color: string;
-    size: number;
+    brushSize: number;
     tool: Tool;
+    erase: boolean;
 }
 
 const useDrawSettings = (initial?: Partial<DrawSettings>) => {
     const defaultSettings: DrawSettings = {
         color: '#000000',
-        size: 4,
+        brushSize: 4,
         tool: DRAW_TOOLS.PEN,
+        erase: false,
         ...initial,
     };
 
