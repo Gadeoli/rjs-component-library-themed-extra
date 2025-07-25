@@ -14,6 +14,7 @@ import {
     drawCircle,
     drawLine,
     drawStroke,
+    generateCanvasImage,
     getMousePos,
     renderEditorState 
 } from "../utils/helpers";
@@ -179,6 +180,38 @@ const useEditorEngine = (initialState : EditorState) => {
         actionSettings.update({isInside: true});
     }
 
+    /**
+     * Generates a image source from the canvas content.
+     * @returns {Promise<string | null>} A promise that resolves with the edited image src or null if the canvas is not available.
+     */
+    const generateEditedImage = (): Promise<string | null> => {
+        if(
+            !canvasRefs.background.current || 
+            !canvasRefs.drawings.current || 
+            !canvasRefs.texts.current
+        ){
+            return new Promise((resolve) => {
+                resolve(null);
+                return;
+            })
+        };
+
+        const bgCanvas = canvasRefs.background.current;
+        const layersCanvas = [
+            bgCanvas,
+            canvasRefs.drawings.current,
+            canvasRefs.texts.current
+        ]; 
+
+        return generateCanvasImage(
+            layersCanvas,
+            {
+                height: bgCanvas.height,
+                width: bgCanvas.width
+            }
+        );
+    };
+
     //UI Setters
     const setMode = (mode: Mode) => actionSettings.update({mode: mode}); 
     const setDrawTool = (tool: Tool) => drawSettings.update({tool: tool});
@@ -204,6 +237,7 @@ const useEditorEngine = (initialState : EditorState) => {
         reset,
         render,
         getState: () => engineRef.current!.getState(),
+        generateEditedImage,
         
         handlePointerDown,
         handlePointerMove,

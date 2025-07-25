@@ -267,20 +267,6 @@ export const clearLayer = (
     ctx.save();
 }
 
-export const defaultLabels = {
-    arrow: {txt: 'Arrow'},
-    circle: {txt: 'Circle'},
-    draw: {txt: 'Draw'},
-    settings: {txt: 'Tools'},
-    eraser: {txt: 'Eraser'},
-    line: {txt: 'Line'},
-    pen: {txt: 'Pen'},
-    redo: {txt: 'Redo'},
-    restore: {txt: 'Restore'},
-    shapes: {txt: 'Shapes'},
-    undo: {txt: 'Undo'}
-}
-
 export const getMousePos = (
     e: React.MouseEvent<HTMLCanvasElement>, 
     canvasRef: React.RefObject<HTMLCanvasElement | null>,
@@ -342,3 +328,52 @@ export const getMousePos = (
 
     return { x, y };
 };
+
+/**
+ * Generates a image source from the canvas content.
+ * @returns {Promise<string | null>} A promise that resolves with the edited image src or null if the canvas is not available.
+ */
+export const generateCanvasImage = (canvasLayers : HTMLCanvasElement[], outputSizes: {width: number, height: number}) : Promise<string>  => {
+    return new Promise((resolve) => {
+        let cnvCounter = 0;
+
+        const mergedCanvas = document.createElement('canvas');
+        mergedCanvas.width = outputSizes.width;
+        mergedCanvas.height = outputSizes.height;
+        const mergedCtx = mergedCanvas.getContext('2d');
+
+        canvasLayers.forEach((cnv) => {
+            if(cnv){
+                const dataURL = cnv.toDataURL();
+                const image = new Image();
+
+                image.onload = () => {
+                    mergedCtx?.drawImage(image, 0, 0);
+                    cnvCounter++;
+
+                    if(cnvCounter === canvasLayers.length){
+                        resolve(mergedCanvas.toDataURL('image/png'));
+                    }
+                }
+
+                image.src = dataURL;
+            }
+        })
+    });
+}
+
+export const defaultLabels = {
+    arrow: {txt: 'Arrow'},
+    cancel: {txt: 'Cancel'},
+    circle: {txt: 'Circle'},
+    draw: {txt: 'Draw'},
+    settings: {txt: 'Tools'},
+    eraser: {txt: 'Eraser'},
+    line: {txt: 'Line'},
+    pen: {txt: 'Pen'},
+    redo: {txt: 'Redo'},
+    restore: {txt: 'Restore'},
+    save: {txt: 'Save'},
+    shapes: {txt: 'Shapes'},
+    undo: {txt: 'Undo'}
+}

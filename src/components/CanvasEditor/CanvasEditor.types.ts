@@ -19,7 +19,9 @@ export interface DefaultProps {
      * Function invoked when the edited image is saved.
      * @param image - The edited image src.
      */
-    onExportToImage: (props: ExportToImageProps) => void;
+    onSaveToImage: (props: ExportToImageProps) => void;
+
+    onCancel?: () => void;
 
     /**
      * Custom labels or text options for various elements in the photo editor.
@@ -57,6 +59,7 @@ export interface ExportToImageProps {
 
 export interface TranslationsProps {
     arrow: LabelProps,
+    cancel: LabelProps,
     circle: LabelProps,
     draw: LabelProps,
     redo: LabelProps,
@@ -65,6 +68,7 @@ export interface TranslationsProps {
     eraser: LabelProps,
     line: LabelProps,
     pen: LabelProps,
+    save: LabelProps,
     shapes: LabelProps,
     undo: LabelProps,
 }

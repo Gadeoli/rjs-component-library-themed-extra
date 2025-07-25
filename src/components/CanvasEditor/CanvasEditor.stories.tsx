@@ -1,6 +1,7 @@
 import React, { useEffect, useState, ComponentProps } from "react";
 import { Meta, StoryObj } from "@storybook/react";
 import CanvasEditor from './CanvasEditor';
+import styled from "styled-components";
 
 type StoryProps = ComponentProps<typeof CanvasEditor> & {
     testSrcUrl: string | null | undefined;
@@ -18,7 +19,8 @@ type Story = StoryObj<StoryProps>;
 export const DefaultImageEditor: Story = {
     args: {
         testSrcUrl: "",
-        onExportToImage: ({src, e}) => console.log({src, e}),
+        onSaveToImage: ({src, e}) => console.log({src, e}),
+        onCancel: () => console.log('cancel clicked'),
         loading: false,
         className: "",
 
@@ -38,7 +40,7 @@ export const DefaultImageEditor: Story = {
         backgroundSrc: {
             description: 'img src'
         },
-        onExportToImage: {
+        onSaveToImage: {
             description: 'function to run on onchange event. this will recieve the event'
         },
         labels: {
@@ -86,7 +88,7 @@ export const DefaultImageEditor: Story = {
             }
         }, [testSrcUrl]);
 
-        return (<div>
+        return (<Container>
             <input  type="file" 
                     multiple={false}
                     style={{marginBottom: '20px'}} 
@@ -104,17 +106,18 @@ export const DefaultImageEditor: Story = {
                 }
             }}/>
 
-            <CanvasEditor {...{...args, backgroundSrc: bgSource}} onExportToImage={(props : any) => setSavedSrc(props.src)}/>
+            <CanvasEditor {...{...args, backgroundSrc: bgSource}} onSaveToImage={(props : any) => setSavedSrc(props.src)}/>
 
             <img src={savedSrc} alt='saved img - preview' style={{width: '300px', marginTop: '40px'}}/>
-        </div>)
+        </Container>)
     }
 };
 
 export const DefaultEditor: Story = {
     args: {
         testSrcUrl: "",
-        onExportToImage: ({src, e}) => console.log({src, e}),
+        onSaveToImage: ({src, e}) => console.log({src, e}),
+        onCancel: () => console.log('cancel clicked'),
         loading: false,
         className: "",
         type: "free-editor",
@@ -134,7 +137,7 @@ export const DefaultEditor: Story = {
         backgroundSrc: {
             description: 'img src'
         },
-        onExportToImage: {
+        onSaveToImage: {
             description: 'function to run on onchange event. this will recieve the event'
         },
         labels: {
@@ -159,16 +162,27 @@ export const DefaultEditor: Story = {
     render: ({testSrcUrl, ...args}) => {
         const [savedSrc, setSavedSrc] = useState<string | undefined>('');
 
-        return (<div>
+        return (<Container>
             <CanvasEditor 
                 {...{...args}} 
-                onExportToImage={(props : any) => setSavedSrc(props.src)}
+                onSaveToImage={(props : any) => setSavedSrc(props.src)}
                 // height='500px'
             />
 
             <div style={{marginTop: '40px'}}>
-                <img src={savedSrc} alt='saved img - preview' style={{width: '300px'}}/>
+                <ImgResult src={savedSrc} alt='saved img - preview' style={{width: '300px'}}/>
             </div>
-        </div>)
+        </Container>)
     }
 };
+
+const Container = styled.div`
+    display: flex;
+    flex-direction: column;
+`
+
+const ImgResult = styled.img`
+    display: block;
+    border: 1px solid #fff;
+    min-height: 50px;
+`;
