@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback } from 'react';
+import { Point } from './useEditorEngine.types';
 
 export enum MODES {
     DRAW='draw',
@@ -11,7 +12,8 @@ export interface ActionSettings {
     mode: Mode;
     isDrawing: boolean;
     isInside: boolean;
-    pointer: string
+    pointer: string;
+    offset: Point;
 }
 
 const useActionSettings = (initial?: Partial<ActionSettings>) => {
@@ -20,6 +22,7 @@ const useActionSettings = (initial?: Partial<ActionSettings>) => {
         isDrawing: false,
         isInside: false,
         pointer: 'default',
+        offset: {x: 0, y: 0},
         ...initial,
     };
 

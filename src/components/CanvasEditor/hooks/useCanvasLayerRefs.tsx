@@ -2,7 +2,7 @@ import { useRef, useEffect, useMemo, useState } from "react";
 
 type CanvasLayers = "background" | "drawings" | "texts" | "interactions";
 
-type CanvasRefs = Record<CanvasLayers, React.RefObject<HTMLCanvasElement | null>>;
+export type CanvasRefs = Record<CanvasLayers, React.RefObject<HTMLCanvasElement | null>>;
 export type CanvasContexts = Record<CanvasLayers, CanvasRenderingContext2D | null>;
 
 export function useCanvasLayerRefs(containerRef: React.RefObject<HTMLElement | null>) {

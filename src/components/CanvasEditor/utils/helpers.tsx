@@ -1,36 +1,33 @@
 import uuid from "../../../helpers/uuid";
-import { CanvasContexts } from "../hooks/useCanvasLayerRefs";
-import { DRAW_TOOLS, DrawSettings } from "../hooks/useDrawSettings";
+import { CanvasContexts, CanvasRefs } from "../hooks/useCanvasLayerRefs";
+import { DRAW_TOOLS } from "../hooks/useDrawSettings";
 import { Command, DrawingObject, EditorState, Point, TextObject } from "../hooks/useEditorEngine.types";
 
 export const initialPoint = {x: 0, y: 0};
 
+export const hasAllLayers = (ctxs: CanvasContexts) : ctxs is CanvasContexts & { background: HTMLCanvasElement, drawings: HTMLCanvasElement, texts: HTMLCanvasElement, interactions: HTMLCanvasElement } => ctxs.background !== null && ctxs.drawings !== null && ctxs.texts !== null && ctxs.interactions !== null;
+
 export const renderEditorState = (state: EditorState, ctxs: CanvasContexts) => {
-    const {
-        background,
-        drawings,
-        texts,
-        interactions
-    } = ctxs;
+    if (!hasAllLayers(ctxs)) return;
 
-    if (!background || !drawings || !texts || interactions) return;
-
-    renderBackgroundLayer(state, background);
-    renderDrawingsLayer(state, drawings);
-    renderTextsLayer(state, texts);
+    renderBackgroundLayer(state, ctxs.background);
+    renderDrawingsLayer(state, ctxs.drawings);
+    renderTextsLayer(state, ctxs.texts);
 }
 
 export const renderBackgroundLayer = (state: EditorState, ctx: CanvasRenderingContext2D) => {
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    if(state.backgroundImage){
+        const w = state.backgroundImage.width;
+        const h = state.backgroundImage.height;
 
-    if (state.backgroundImage) {
-        ctx.drawImage(state.backgroundImage, 0, 0, ctx.canvas.width, ctx.canvas.height);
+        ctx.drawImage(state.backgroundImage, 0, 0, w, h);
+    }else{
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     }
 }
 
 export const renderDrawingsLayer = (state: EditorState, ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-
     for (const obj of state.objects) {
         if (obj.type === "drawing") {
             if([DRAW_TOOLS.PEN, DRAW_TOOLS.ERASER].includes(obj.tool)){
@@ -61,7 +58,7 @@ export const addDrawingCommand = (drawing: DrawingObject) : Command => {
     return {
         id,
         label: 'add-drawing',
-        apply: (state) => ({
+        do: (state) => ({
             ...state,
             objects: [...state.objects, drawing],
         }),
@@ -70,6 +67,27 @@ export const addDrawingCommand = (drawing: DrawingObject) : Command => {
             objects: state.objects.filter(obj => obj.id !== id)
         }),
         affectedLayers: ["drawings"],
+    };
+}
+
+export const setBackgroundImageCommand = (
+    image: HTMLImageElement,
+    prevImage: HTMLImageElement | null
+): Command => {
+    const id = uuid(); 
+
+    return {
+        id,
+        label: 'background-image-set',
+        do: (state) => ({
+            ...state,
+            backgroundImage: image,
+        }),
+        undo: (state) => ({
+            ...state,
+            backgroundImage: prevImage
+        }),
+        affectedLayers: ["background"],
     };
 }
 
@@ -267,20 +285,6 @@ export const clearLayer = (
     ctx.save();
 }
 
-export const defaultLabels = {
-    arrow: {txt: 'Arrow'},
-    circle: {txt: 'Circle'},
-    draw: {txt: 'Draw'},
-    settings: {txt: 'Tools'},
-    eraser: {txt: 'Eraser'},
-    line: {txt: 'Line'},
-    pen: {txt: 'Pen'},
-    redo: {txt: 'Redo'},
-    restore: {txt: 'Restore'},
-    shapes: {txt: 'Shapes'},
-    undo: {txt: 'Undo'}
-}
-
 export const getMousePos = (
     e: React.MouseEvent<HTMLCanvasElement>, 
     canvasRef: React.RefObject<HTMLCanvasElement | null>,
@@ -342,3 +346,127 @@ export const getMousePos = (
 
     return { x, y };
 };
+
+/**
+ * @param canvasRefs 
+ * @param image 
+ * @param containerSizes 
+ * @param fixCssWidth canvas width respect container size in %. If canvas css is setted to bellow 100% than use this fix (ex.: 0.8 to 80%)
+ */
+export const setCanvasSizeFromImage = (
+    canvasRefs: CanvasRefs,
+    image: HTMLImageElement,
+    containerSizes: any,
+    fixCssWidth?:number
+) => {
+    const w = image.width;
+    const h = image.height;
+    const dpr = window.devicePixelRatio || 1;
+    
+    const containerW = (containerSizes?.width || 0) * dpr;
+    const containerH = (containerSizes?.height || 0) * dpr;
+    
+    const imageRatio = w / h;
+    const containerRatio = containerW / containerH;
+
+    /*
+    console.log({
+        containerW,
+        containerH,
+        w,
+        h,
+        imageRatio,
+        containerRatio
+    });
+    */
+
+    for (const key in canvasRefs) {
+        const canvas = canvasRefs[key as keyof CanvasRefs]?.current;
+        
+        if (canvas) {
+            let canvasH = h;
+            let canvasW = w;
+            let fixRatioWScale = 1;
+            let fixRatioHScale = 1;
+
+            //canvas cant handle default image sizes
+            if(containerW && containerRatio < imageRatio && fixCssWidth){
+                const fix = imageRatio / containerRatio;
+
+                if(containerH > containerW){
+                    fixRatioHScale = fix / 0.8;
+                }else{
+                    fixRatioWScale = fix / 0.8;
+                }
+            }
+
+            canvasH = canvasH * dpr * fixRatioHScale;
+            canvasW = canvasW * dpr * fixRatioWScale;
+
+            canvas.width = canvasW;
+            canvas.height = canvasH;
+
+            // commented out - canvas follow container sizes / image sizes
+            // canvas.style.width = `${w}px`;
+            // canvas.style.height = `${h}px`;
+            
+            const ctx = canvas.getContext("2d");
+            
+            if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+    }
+} 
+
+export const getBiggerSize = (obj : HTMLImageElement | HTMLCanvasElement) : number => {
+    const biggerSize = obj.width > obj.height ? obj.width : obj.height;    
+    return biggerSize;
+}
+
+/**
+ * Generates a image source from the canvas content.
+ * @returns {Promise<string | null>} A promise that resolves with the edited image src or null if the canvas is not available.
+ */
+export const generateCanvasImage = (canvasLayers : HTMLCanvasElement[], outputSizes: {width: number, height: number}) : Promise<string>  => {
+    return new Promise((resolve) => {
+        let cnvCounter = 0;
+
+        const mergedCanvas = document.createElement('canvas');
+        mergedCanvas.width = outputSizes.width;
+        mergedCanvas.height = outputSizes.height;
+        const mergedCtx = mergedCanvas.getContext('2d');
+
+        canvasLayers.forEach((cnv) => {
+            if(cnv){
+                const dataURL = cnv.toDataURL();
+                const image = new Image();
+
+                image.onload = () => {
+                    mergedCtx?.drawImage(image, 0, 0);
+                    cnvCounter++;
+
+                    if(cnvCounter === canvasLayers.length){
+                        resolve(mergedCanvas.toDataURL('image/png'));
+                    }
+                }
+
+                image.src = dataURL;
+            }
+        })
+    });
+}
+
+export const defaultLabels = {
+    arrow: {txt: 'Arrow'},
+    cancel: {txt: 'Cancel'},
+    circle: {txt: 'Circle'},
+    draw: {txt: 'Draw'},
+    settings: {txt: 'Tools'},
+    eraser: {txt: 'Eraser'},
+    line: {txt: 'Line'},
+    pen: {txt: 'Pen'},
+    redo: {txt: 'Redo'},
+    restore: {txt: 'Restore'},
+    save: {txt: 'Save'},
+    shapes: {txt: 'Shapes'},
+    undo: {txt: 'Undo'}
+}

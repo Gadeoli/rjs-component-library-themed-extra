@@ -14,6 +14,7 @@ import { EditorState } from './hooks/useEditorEngine.types';
 import { MODES } from './hooks/useActionSettings';
 import { DRAW_TOOLS } from './hooks/useDrawSettings';
 import { transparentize } from 'polished';
+import { useGhostInFirstRender } from '@gadeoli/rjs-hooks-library';
 
 const initialState: EditorState = {
     backgroundImage: null,
@@ -24,15 +25,22 @@ const initialState: EditorState = {
 const CanvasEditor: FC<DefaultProps> = ({
     type='image-editor',
     backgroundSrc,
-    onExportToImage,
     labels=defaultLabels,
     height='500px',
     loading,
     className,
-    style
+    style,
+
+    onCancel,
+    onSaveToImage,
 }) => {
     const { theme } = useTheme();
-    const editorEngine = useEditorEngine(initialState);
+    const editorEngine = useEditorEngine(
+        initialState, 
+        {
+            fixCssWidth: type === 'image-editor' ? 0.8 : 1
+        }
+    );
     const {
         containerRef,
         canvasRefs,
@@ -49,6 +57,8 @@ const CanvasEditor: FC<DefaultProps> = ({
         undo,
         redo,
         reset,
+        generateEditedImage,
+        setEditedImage,
 
         handlePointerDown,
         handlePointerMove,
@@ -56,6 +66,7 @@ const CanvasEditor: FC<DefaultProps> = ({
         handlePointerOut,
         handlePointerEnter
     } = editorEngine;
+    const containerVisible = useGhostInFirstRender();
 
     const classNames = handleCssClassnames([
         'cl-canvas-editor',
@@ -63,6 +74,10 @@ const CanvasEditor: FC<DefaultProps> = ({
         type === 'image-editor' && !backgroundSrc ? 'hidden-editor' : undefined,
         className
     ]);
+
+    const classNamesCanvasContainer = useMemo(() => handleCssClassnames([
+        type === 'image-editor' ? 'layer-size-fixed' : 'layer-size-free'
+    ]), [type]);
 
     const classNamesCanvas = useMemo(() => handleCssClassnames([
         'cl-canvas-layer',
@@ -80,91 +95,117 @@ const CanvasEditor: FC<DefaultProps> = ({
 
     useEffect(() => {
         const ctx = contexts.drawings;
-
         if (!ctx) return;
-
         renderDrawingsLayer(getState(), ctx);
     }, [getState])
 
-    return <Container theme={theme} className={classNames} style={style}>
-        <ActionConteiner theme={theme}>
-            <ActionButton
-                settings={editorEngine}
-                action={{
-                    mode: MODES.DRAW,
-                    drawTool: DRAW_TOOLS.PEN
-                }}
-                label={labels.pen}
-                defaultIcon='&#9998;'
-            />
-            <ActionButton
-                settings={editorEngine}
-                action={{
-                    mode: MODES.DRAW,
-                    drawTool: DRAW_TOOLS.ERASER
-                }}
-                label={labels.eraser}
-                defaultIcon='&#x232B;'
-            />
-            <ActionToggle label={labels.shapes}>
-                <CardToggleContainer theme={theme}>
-                    <ActionButton
-                        settings={editorEngine}
-                        action={{
-                            mode: MODES.DRAW,
-                            drawTool: DRAW_TOOLS.LINE
-                        }}
-                        label={labels.line}
-                        defaultIcon='&#9475;'
-                    />
-                    <ActionButton
-                        settings={editorEngine}
-                        action={{
-                            mode: MODES.DRAW,
-                            drawTool: DRAW_TOOLS.ARROW
-                        }}
-                        label={labels.arrow}
-                        defaultIcon='&#11016;'
-                    />
-                    <ActionButton
-                        settings={editorEngine}
-                        action={{
-                            mode: MODES.DRAW,
-                            drawTool: DRAW_TOOLS.CIRCLE
-                        }}
-                        label={labels.circle}
-                        defaultIcon='&#9711;'
-                    />
-                </CardToggleContainer>            
-            </ActionToggle>
-            <ActionButton
-                settings={editorEngine}
-                onClick={() => setShowSubActions(!showSubActions)}
-                label={labels.settings}
-                defaultIcon=' &#9881;'
-            />   
-            <ActionButton
-                settings={editorEngine}
-                onClick={() => reset()}
-                label={labels.restore}
-                defaultIcon='&#8634;'
-                disabled={!canReset}
-            />
-            <ActionButton
-                settings={editorEngine}
-                onClick={() => undo()}
-                label={labels.undo}
-                defaultIcon='&#8630;'
-                disabled={!canUndo}
-            />
-            <ActionButton
-                settings={editorEngine}
-                onClick={() => redo()}
-                label={labels.redo}
-                defaultIcon='&#8631;'
-                disabled={!canRedo}
-            />
+    useEffect(() => {
+        if(backgroundSrc){
+            setEditedImage(backgroundSrc);
+        }
+    }, [backgroundSrc])
 
+    return <Container theme={theme} className={classNames} style={style} $visible={containerVisible}>
+        <ActionConteiner theme={theme}>
+            <ActionBlock>
+                <ActionButton
+                    settings={editorEngine}
+                    action={{
+                        mode: MODES.DRAW,
+                        drawTool: DRAW_TOOLS.PEN
+                    }}
+                    label={labels.pen}
+                    defaultIcon='&#9998;'
+                />
+                <ActionButton
+                    settings={editorEngine}
+                    action={{
+                        mode: MODES.DRAW,
+                        drawTool: DRAW_TOOLS.ERASER
+                    }}
+                    label={labels.eraser}
+                    defaultIcon='&#x232B;'
+                />
+                <ActionToggle label={labels.shapes}>
+                    <CardToggleContainer theme={theme}>
+                        <ActionButton
+                            settings={editorEngine}
+                            action={{
+                                mode: MODES.DRAW,
+                                drawTool: DRAW_TOOLS.LINE
+                            }}
+                            label={labels.line}
+                            defaultIcon='&#9475;'
+                        />
+                        <ActionButton
+                            settings={editorEngine}
+                            action={{
+                                mode: MODES.DRAW,
+                                drawTool: DRAW_TOOLS.ARROW
+                            }}
+                            label={labels.arrow}
+                            defaultIcon='&#11016;'
+                        />
+                        <ActionButton
+                            settings={editorEngine}
+                            action={{
+                                mode: MODES.DRAW,
+                                drawTool: DRAW_TOOLS.CIRCLE
+                            }}
+                            label={labels.circle}
+                            defaultIcon='&#9711;'
+                        />
+                    </CardToggleContainer>            
+                </ActionToggle>
+                <ActionButton
+                    settings={editorEngine}
+                    onClick={() => setShowSubActions(!showSubActions)}
+                    label={labels.settings}
+                    defaultIcon=' &#9881;'
+                />   
+                <ActionButton
+                    settings={editorEngine}
+                    onClick={() => reset()}
+                    label={labels.restore}
+                    defaultIcon='&#8634;'
+                    disabled={!canReset}
+                />
+                <ActionButton
+                    settings={editorEngine}
+                    onClick={() => undo()}
+                    label={labels.undo}
+                    defaultIcon='&#8630;'
+                    disabled={!canUndo}
+                />
+                <ActionButton
+                    settings={editorEngine}
+                    onClick={() => redo()}
+                    label={labels.redo}
+                    defaultIcon='&#8631;'
+                    disabled={!canRedo}
+                />           
+            </ActionBlock>
+            <ActionBlock style={{justifyContent: 'flex-end'}}>
+                <ActionButton
+                    settings={editorEngine}
+                    onClick={ async (e: any) => {
+                        const editedSrc = await generateEditedImage();
+                        onSaveToImage({src: editedSrc, e});
+                    }}
+                    label={labels.save}
+                    defaultIcon='&#128190;'
+                    tooltipPos='left'
+                />
+                <ActionButton
+                    settings={editorEngine}
+                    onClick={() => {
+                        if(onCancel) onCancel();
+                    }}
+                    label={labels.cancel}
+                    defaultIcon='&#215;'
+                    tooltipPos='left'
+                />
+            </ActionBlock>
             {/* let index > that canvas indexes */}
             <SubActionContainer theme={theme} $index={5} $show={showSubActions}> 
                 <Button type='clean' className='sub-action-minimaze' onClick={() => setShowSubActions(false)}>
@@ -177,7 +218,7 @@ const CanvasEditor: FC<DefaultProps> = ({
             </SubActionContainer>
         </ActionConteiner>
 
-        <CanvasContainer ref={containerRef} theme={theme}>
+        <CanvasContainer className={classNamesCanvasContainer} ref={containerRef} theme={theme}>
             <Canvas 
                 ref={canvasRefs.background} 
                 $height={height}
@@ -209,14 +250,16 @@ const ActionButton = ({
     action, 
     label, 
     defaultIcon,
-    disabled
+    disabled,
+    tooltipPos='bottom',
 } : {
     onClick?: MouseEventHandler<HTMLButtonElement>, 
     settings: any, 
     action?: any, 
     label: LabelProps, 
     defaultIcon: string,
-    disabled?: boolean
+    disabled?: boolean,
+    tooltipPos?: 'top' | 'bottom' | 'left' | 'right'
 }) => {
     const { theme } = useTheme();
     
@@ -258,7 +301,7 @@ const ActionButton = ({
     >
         <Tooltip
             tipcontent={<Span>{label.txt}</Span>}
-            position='bottom'
+            position={tooltipPos}
         >
             <ActionButtonIcon className={classNames} theme={theme}>
                 {label.icon ? (<i className={label.icon}/>) : defaultIcon}
@@ -316,14 +359,18 @@ const ActionDrawOptions: FC<{
     </SubAction>;
 }
 
-const Container = styled.div`
+const Container = styled.div<{$visible: boolean}>`
     box-sizing: border-box;
     width: 100%;
-    &.hidden-editor{
-        display: none;
-    }
     border: 1px solid ${props => props.theme.border};
     border-radius: ${defaultRadius};
+
+    &.hidden-editor{
+        display: ${props => props.$visible ? 'none' : 'block'};
+        opacity: ${props => props.$visible ? 0 : 1};
+        pointer-events: ${props => props.$visible ? 'none' : 'auto'};
+        transition: opacity 0.3s ease;
+    }
 `;
 
 const ActionConteiner = styled.div`
@@ -331,10 +378,20 @@ const ActionConteiner = styled.div`
     background-color: ${props => props.theme.background};
     border-bottom: 2px solid ${props => props.theme.border};
     width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+`;
+
+const ActionBlock = styled.div`
+    background-color: ${props => props.theme.background};
     padding: ${defaultXPM} ${defaultYPM};
     box-sizing: border-box;
     display: flex;
+    width: 50%;
     align-items: center;
+    justify-content: flex-start;
     flex-wrap: wrap;
 `;
 
@@ -356,11 +413,19 @@ const CardToggleActions = styled.div`
 
 const CanvasContainer = styled.div`
     width: 100%;
-    background-color: ${props => props.theme.background};
     box-sizing: border-box;
     position: relative;
     display: flex;
     justify-content: center;
+
+    &.layer-size-fixed{
+        background-size: 40px 40px;
+        background-image: radial-gradient(circle, ${props => props.theme.border} 1px, rgba(0, 0, 0, 0) 1px);
+    }
+
+    &.layer-size-free{
+        background-color: ${props => props.theme.background};
+    }
 `;
 
 const Canvas = styled.canvas<{$index: number, $height: string}>`
@@ -370,7 +435,7 @@ const Canvas = styled.canvas<{$index: number, $height: string}>`
     z-index: ${props => props.$index * 10};
 
     &.layer-size-fixed{
-        max-width: 70%;
+        max-width: 80%;
     }
 
     &.layer-size-free{

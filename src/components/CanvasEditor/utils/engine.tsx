@@ -10,14 +10,15 @@ const createEditorEngine = (initialState: EditorState): EditorEngine => {
     return {
         canUndo: () => undoStack.length > 0,
         canRedo: () => redoStack.length > 0,
-        canReset: () => current.objects.length > 0,
+        canReset: () => current.objects.length > 0 || current.backgroundImage !== null,
         
         getState: () => current,
 
         dispatch: (cmd: Command) => {
             undoStack.push(cmd);
             redoStack.length = 0; // clear redo on new action
-            current = cmd.apply(current);
+            current = cmd.do(current);
+            return current;
         },
 
         undo: () => {
@@ -27,7 +28,7 @@ const createEditorEngine = (initialState: EditorState): EditorEngine => {
             
             redoStack.push(last);
             
-            current = undoStack.reduce((state, cmd) => cmd.apply(state), initialState);
+            current = undoStack.reduce((state, cmd) => cmd.do(state), initialState);
         },
 
         redo: () => {
@@ -37,7 +38,7 @@ const createEditorEngine = (initialState: EditorState): EditorEngine => {
             
             undoStack.push(cmd);
             
-            current = cmd.apply(current);
+            current = cmd.do(current);
         },
 
         reset: () => {

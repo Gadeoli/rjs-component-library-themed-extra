@@ -29,10 +29,14 @@ export interface EditorState {
     selectedObjectIds: string[];
 }
 
+export interface EditorConfig {
+    fixCssWidth?: number;
+}
+
 export type Command = {
     id: string;
     label?: string;
-    apply: (state: EditorState) => EditorState;
+    do: (state: EditorState) => EditorState;
     undo: (state: EditorState) => EditorState;
     affectedLayers: ("background" | "drawings" | "texts")[] | "all";
 }
