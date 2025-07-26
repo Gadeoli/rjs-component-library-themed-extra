@@ -1,45 +1,28 @@
 import uuid from "../../../helpers/uuid";
-import { CanvasContexts } from "../hooks/useCanvasLayerRefs";
+import { CanvasContexts, CanvasRefs } from "../hooks/useCanvasLayerRefs";
 import { DRAW_TOOLS } from "../hooks/useDrawSettings";
 import { Command, DrawingObject, EditorState, Point, TextObject } from "../hooks/useEditorEngine.types";
 
 export const initialPoint = {x: 0, y: 0};
 
-const hasAllLayers = (ctxs: CanvasContexts) : ctxs is CanvasContexts & { background: HTMLCanvasElement, drawings: HTMLCanvasElement, texts: HTMLCanvasElement, interactions: HTMLCanvasElement } => ctxs.background !== null && ctxs.drawings !== null && ctxs.texts !== null && ctxs.interactions !== null;
+export const hasAllLayers = (ctxs: CanvasContexts) : ctxs is CanvasContexts & { background: HTMLCanvasElement, drawings: HTMLCanvasElement, texts: HTMLCanvasElement, interactions: HTMLCanvasElement } => ctxs.background !== null && ctxs.drawings !== null && ctxs.texts !== null && ctxs.interactions !== null;
 
 export const renderEditorState = (state: EditorState, ctxs: CanvasContexts) => {
     if (!hasAllLayers(ctxs)) return;
 
-    renderBackgroundLayer(state, ctxs);
+    renderBackgroundLayer(state, ctxs.background);
     renderDrawingsLayer(state, ctxs.drawings);
     renderTextsLayer(state, ctxs.texts);
 }
 
-export const renderBackgroundLayer = (state: EditorState, ctxs: CanvasContexts) => {
-    if (!hasAllLayers(ctxs)) return;
-
-    const bgCanvas = ctxs.background.canvas;
-    const drawCanvas = ctxs.drawings.canvas;
-    const textCanvas = ctxs.texts.canvas;
-    const interCanvas = ctxs.interactions.canvas;
-
+export const renderBackgroundLayer = (state: EditorState, ctx: CanvasRenderingContext2D) => {
     if(state.backgroundImage){
         const w = state.backgroundImage.width;
         const h = state.backgroundImage.height;
 
-        bgCanvas.width = w;
-        bgCanvas.height = h;
-
-        drawCanvas.width = w;
-        drawCanvas.height = h;
-
-        textCanvas.width = w;
-        textCanvas.height = h;
-
-        interCanvas.width = w;
-        interCanvas.height = h;
-        
-        ctxs.background.drawImage(state.backgroundImage, 0, 0, w, h);
+        ctx.drawImage(state.backgroundImage, 0, 0, w, h);
+    }else{
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     }
 }
 
@@ -363,6 +346,81 @@ export const getMousePos = (
 
     return { x, y };
 };
+
+/**
+ * @param canvasRefs 
+ * @param image 
+ * @param containerSizes 
+ * @param fixCssWidth canvas width respect container size in %. If canvas css is setted to bellow 100% than use this fix (ex.: 0.8 to 80%)
+ */
+export const setCanvasSizeFromImage = (
+    canvasRefs: CanvasRefs,
+    image: HTMLImageElement,
+    containerSizes: any,
+    fixCssWidth?:number
+) => {
+    const w = image.width;
+    const h = image.height;
+    const dpr = window.devicePixelRatio || 1;
+    
+    const containerW = (containerSizes?.width || 0) * dpr;
+    const containerH = (containerSizes?.height || 0) * dpr;
+    
+    const imageRatio = w / h;
+    const containerRatio = containerW / containerH;
+
+    /*
+    console.log({
+        containerW,
+        containerH,
+        w,
+        h,
+        imageRatio,
+        containerRatio
+    });
+    */
+
+    for (const key in canvasRefs) {
+        const canvas = canvasRefs[key as keyof CanvasRefs]?.current;
+        
+        if (canvas) {
+            let canvasH = h;
+            let canvasW = w;
+            let fixRatioWScale = 1;
+            let fixRatioHScale = 1;
+
+            //canvas cant handle default image sizes
+            if(containerW && containerRatio < imageRatio && fixCssWidth){
+                const fix = imageRatio / containerRatio;
+
+                if(containerH > containerW){
+                    fixRatioHScale = fix / 0.8;
+                }else{
+                    fixRatioWScale = fix / 0.8;
+                }
+            }
+
+            canvasH = canvasH * dpr * fixRatioHScale;
+            canvasW = canvasW * dpr * fixRatioWScale;
+
+            canvas.width = canvasW;
+            canvas.height = canvasH;
+
+            // commented out - canvas follow container sizes / image sizes
+            // canvas.style.width = `${w}px`;
+            // canvas.style.height = `${h}px`;
+            
+            const ctx = canvas.getContext("2d");
+            
+            if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+    }
+} 
+
+export const getBiggerSize = (obj : HTMLImageElement | HTMLCanvasElement) : number => {
+    const biggerSize = obj.width > obj.height ? obj.width : obj.height;    
+    return biggerSize;
+}
 
 /**
  * Generates a image source from the canvas content.

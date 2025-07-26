@@ -14,6 +14,7 @@ import { EditorState } from './hooks/useEditorEngine.types';
 import { MODES } from './hooks/useActionSettings';
 import { DRAW_TOOLS } from './hooks/useDrawSettings';
 import { transparentize } from 'polished';
+import { useGhostInFirstRender } from '@gadeoli/rjs-hooks-library';
 
 const initialState: EditorState = {
     backgroundImage: null,
@@ -34,7 +35,12 @@ const CanvasEditor: FC<DefaultProps> = ({
     onSaveToImage,
 }) => {
     const { theme } = useTheme();
-    const editorEngine = useEditorEngine(initialState);
+    const editorEngine = useEditorEngine(
+        initialState, 
+        {
+            fixCssWidth: type === 'image-editor' ? 0.8 : 1
+        }
+    );
     const {
         containerRef,
         canvasRefs,
@@ -60,6 +66,7 @@ const CanvasEditor: FC<DefaultProps> = ({
         handlePointerOut,
         handlePointerEnter
     } = editorEngine;
+    const containerVisible = useGhostInFirstRender();
 
     const classNames = handleCssClassnames([
         'cl-canvas-editor',
@@ -98,7 +105,7 @@ const CanvasEditor: FC<DefaultProps> = ({
         }
     }, [backgroundSrc])
 
-    return <Container theme={theme} className={classNames} style={style}>
+    return <Container theme={theme} className={classNames} style={style} $visible={containerVisible}>
         <ActionConteiner theme={theme}>
             <ActionBlock>
                 <ActionButton
@@ -352,14 +359,17 @@ const ActionDrawOptions: FC<{
     </SubAction>;
 }
 
-const Container = styled.div`
+const Container = styled.div<{$visible: boolean}>`
     box-sizing: border-box;
     width: 100%;
     border: 1px solid ${props => props.theme.border};
     border-radius: ${defaultRadius};
 
     &.hidden-editor{
-        display: none;
+        display: ${props => props.$visible ? 'none' : 'block'};
+        opacity: ${props => props.$visible ? 0 : 1};
+        pointer-events: ${props => props.$visible ? 'none' : 'auto'};
+        transition: opacity 0.3s ease;
     }
 `;
 
@@ -410,7 +420,7 @@ const CanvasContainer = styled.div`
 
     &.layer-size-fixed{
         background-size: 40px 40px;
-        background-image: radial-gradient(circle, ${props => props.theme.text} 1px, rgba(0, 0, 0, 0) 1px);
+        background-image: radial-gradient(circle, ${props => props.theme.border} 1px, rgba(0, 0, 0, 0) 1px);
     }
 
     &.layer-size-free{
@@ -425,7 +435,7 @@ const Canvas = styled.canvas<{$index: number, $height: string}>`
     z-index: ${props => props.$index * 10};
 
     &.layer-size-fixed{
-        max-width: 70%;
+        max-width: 80%;
     }
 
     &.layer-size-free{

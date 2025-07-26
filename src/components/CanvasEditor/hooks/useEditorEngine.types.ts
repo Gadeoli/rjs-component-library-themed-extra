@@ -29,6 +29,10 @@ export interface EditorState {
     selectedObjectIds: string[];
 }
 
+export interface EditorConfig {
+    fixCssWidth?: number;
+}
+
 export type Command = {
     id: string;
     label?: string;

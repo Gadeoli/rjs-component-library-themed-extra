@@ -6,6 +6,7 @@ import {
 } from "react";
 import { 
     Command,
+    EditorConfig,
     EditorState
 } from "./useEditorEngine.types";
 import { 
@@ -16,22 +17,31 @@ import {
     drawLine,
     drawStroke,
     generateCanvasImage,
+    getBiggerSize,
     getMousePos,
     renderEditorState, 
-    setBackgroundImageCommand
+    setBackgroundImageCommand,
+    setCanvasSizeFromImage
 } from "../utils/helpers";
 import { useCanvasLayerRefs } from "./useCanvasLayerRefs";
 import createEditorEngine from "../utils/engine";
 import { EditorEngine } from "../utils/engine.types";
 import useCurrentPath from "./useCurrentPath";
-import uuid from "../../../helpers/uuid";
 import useDrawSettings, { DRAW_TOOLS, DrawSettings, Tool } from "./useDrawSettings";
 import useActionSettings, { Mode, MODES } from "./useActionSettings";
 import useFilterSettings from "./useFilterSettings";
 import useScaleSettings from "./useScaleSettings";
+import { useElementSize } from "@gadeoli/rjs-hooks-library";
+import uuid from "../../../helpers/uuid";
+import { getBestBrushSizePt } from "../../../helpers/editor";
+import { useElementResizeObserver } from "./useElementResizeObserver";
 
-const useEditorEngine = (initialState : EditorState) => {
+const useEditorEngine = (
+    initialState : EditorState,
+    configs?: EditorConfig 
+) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
+    const containerSize = useElementSize(containerRef);
     const { canvasRefs, contexts } = useCanvasLayerRefs(containerRef);
     const engineRef = useRef<EditorEngine | null>(null);
     const currentPath = useCurrentPath();
@@ -43,7 +53,7 @@ const useEditorEngine = (initialState : EditorState) => {
     });
 
     //state
-    const [, forceUpdate] = useState(0);
+    const [update, forceUpdate] = useState(0);
     const actionSettings = useActionSettings();
     const mode = actionSettings.ref.current.mode;
     const {isDrawing, isInside} = actionSettings.ref.current;
@@ -229,14 +239,39 @@ const useEditorEngine = (initialState : EditorState) => {
     const setMode = (mode: Mode) => actionSettings.update({mode: mode}); 
     const setDrawTool = (tool: Tool) => drawSettings.update({tool: tool});
     const setEditedImage = (src : string) => {
-        const img = new Image();
-        img.src = src;
-        img.onload = () => {
+        const image = new Image();
+        image.src = src;
+        image.onload = () => {
             const prevImage = engineRef.current!.getState().backgroundImage;
-            dispatch(setBackgroundImageCommand(img, prevImage));
+            const biggerSize = getBiggerSize(image);
+            const fixCssWidth = configs?.fixCssWidth || 1;
+
+            setCanvasSizeFromImage(canvasRefs, image, containerSize, fixCssWidth);
+            drawSettings.update({
+                brushSize: getBestBrushSizePt(biggerSize)
+            });
+            dispatch(setBackgroundImageCommand(image, prevImage));
             render();
         }
-    }
+    };
+
+    //rerender image on resize
+    useElementResizeObserver(containerRef, contexts, (size) => {
+        const image = engineRef.current!.getState().backgroundImage;
+
+        if(image){
+            const biggerSize = getBiggerSize(image);
+            const fixCssWidth = configs?.fixCssWidth || 1;
+
+            setCanvasSizeFromImage(canvasRefs, image, containerSize, fixCssWidth);
+            
+            drawSettings.update({
+                brushSize: getBestBrushSizePt(biggerSize)
+            });
+
+            render();
+        }  
+    })
 
     return {
         containerRef,

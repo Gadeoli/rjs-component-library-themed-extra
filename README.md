@@ -4,15 +4,15 @@
 
 ## Components
 
-ImageEditor (React state based) (Not exported) - same from react-canvas-editor with some extra action/tools included by chatgpt. There are several problems, multiple are related to bad state control.   
+- ImageEditor (React state based) (Not exported) - same from react-canvas-editor with some extra action/tools included by chatgpt. There are several problems, multiple are related to bad state control   
 
-CanvasEditor (React ref based) (Not exported) - Most code are from GPT - Canvas editor try to fix ImageEditor react state changes overloads    
+- CanvasEditor (React ref based) - Most code are from GPT *This is a 2 shoot to fix ImageEditor bad state control  
 
 ## Sources
 
 (Don't use the links bellow. Search by yourself is always a saffer practice!)  
 [source I - npm react-photo-editor](https://www.npmjs.com/package/react-photo-editor) - Base to create photo editor hook  
-[source II - ChatGPT](https://chatgpt.com/) - Used to implement multiple function in photo editor hook  
+[source II - ChatGPT](https://chatgpt.com/) - Used to implement multiple functions in Editors code
 
 ## ToDO
 

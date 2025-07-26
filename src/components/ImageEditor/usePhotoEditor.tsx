@@ -12,8 +12,6 @@ import {
     TextItemProps
 } from "./usePhotoEditor.types";
 import { 
-    commonBrushSizesPt,
-    commonFontSizesPt,
     DRAW_TOOLS,
     drawArrow,
     drawArrowMove,
@@ -26,8 +24,6 @@ import {
     drawText,
     FILTERS,
     generateCanvasImage, 
-    getBestBrushSizePt, 
-    getBestFontSizesPt, 
     getCanvasPtToPx, 
     getMetrics, 
     getMousePos, 
@@ -38,6 +34,12 @@ import {
 import { useOnPressKey, usePrevious } from "@gadeoli/rjs-hooks-library";
 import { debounce } from "../../helpers";
 import useWindowScrollLock from "./useWindowScrollLock";
+import { 
+    commonBrushSizesPt,
+    commonFontSizesPt,
+    getBestBrushSizePt, 
+    getBestFontSizesPt, 
+ } from "../../helpers/editor";
 
 /**
  * A hook to control double canvas layer
