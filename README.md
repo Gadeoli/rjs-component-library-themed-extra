@@ -1,6 +1,6 @@
 # RJS Component Library Themed Extra
 
-(A test for now) This is a component-library-themed to extend @gadeoli/rjs-component-library-themed-extra with unusual components.  
+(A test for now) This is a component-library-themed to extend @gadeoli/rjs-component-library-themed with unusual components.  
 
 ## Components
 
