@@ -52,6 +52,7 @@ const CanvasEditor: FC<DefaultProps> = ({
         redo,
         reset,
         generateEditedImage,
+        setEditedImage,
 
         handlePointerDown,
         handlePointerMove,
@@ -66,6 +67,10 @@ const CanvasEditor: FC<DefaultProps> = ({
         type === 'image-editor' && !backgroundSrc ? 'hidden-editor' : undefined,
         className
     ]);
+
+    const classNamesCanvasContainer = useMemo(() => handleCssClassnames([
+        type === 'image-editor' ? 'layer-size-fixed' : 'layer-size-free'
+    ]), [type]);
 
     const classNamesCanvas = useMemo(() => handleCssClassnames([
         'cl-canvas-layer',
@@ -83,11 +88,15 @@ const CanvasEditor: FC<DefaultProps> = ({
 
     useEffect(() => {
         const ctx = contexts.drawings;
-
         if (!ctx) return;
-
         renderDrawingsLayer(getState(), ctx);
     }, [getState])
+
+    useEffect(() => {
+        if(backgroundSrc){
+            setEditedImage(backgroundSrc);
+        }
+    }, [backgroundSrc])
 
     return <Container theme={theme} className={classNames} style={style}>
         <ActionConteiner theme={theme}>
@@ -202,7 +211,7 @@ const CanvasEditor: FC<DefaultProps> = ({
             </SubActionContainer>
         </ActionConteiner>
 
-        <CanvasContainer ref={containerRef} theme={theme}>
+        <CanvasContainer className={classNamesCanvasContainer} ref={containerRef} theme={theme}>
             <Canvas 
                 ref={canvasRefs.background} 
                 $height={height}
@@ -346,11 +355,12 @@ const ActionDrawOptions: FC<{
 const Container = styled.div`
     box-sizing: border-box;
     width: 100%;
+    border: 1px solid ${props => props.theme.border};
+    border-radius: ${defaultRadius};
+
     &.hidden-editor{
         display: none;
     }
-    border: 1px solid ${props => props.theme.border};
-    border-radius: ${defaultRadius};
 `;
 
 const ActionConteiner = styled.div`
@@ -393,11 +403,19 @@ const CardToggleActions = styled.div`
 
 const CanvasContainer = styled.div`
     width: 100%;
-    background-color: ${props => props.theme.background};
     box-sizing: border-box;
     position: relative;
     display: flex;
     justify-content: center;
+
+    &.layer-size-fixed{
+        background-size: 40px 40px;
+        background-image: radial-gradient(circle, ${props => props.theme.text} 1px, rgba(0, 0, 0, 0) 1px);
+    }
+
+    &.layer-size-free{
+        background-color: ${props => props.theme.background};
+    }
 `;
 
 const Canvas = styled.canvas<{$index: number, $height: string}>`

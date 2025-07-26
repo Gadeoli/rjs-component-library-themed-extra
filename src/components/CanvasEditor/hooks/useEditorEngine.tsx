@@ -1,5 +1,6 @@
 import { 
     useCallback,
+    useEffect,
     useRef, 
     useState
 } from "react";
@@ -16,7 +17,8 @@ import {
     drawStroke,
     generateCanvasImage,
     getMousePos,
-    renderEditorState 
+    renderEditorState, 
+    setBackgroundImageCommand
 } from "../utils/helpers";
 import { useCanvasLayerRefs } from "./useCanvasLayerRefs";
 import createEditorEngine from "../utils/engine";
@@ -25,6 +27,8 @@ import useCurrentPath from "./useCurrentPath";
 import uuid from "../../../helpers/uuid";
 import useDrawSettings, { DRAW_TOOLS, DrawSettings, Tool } from "./useDrawSettings";
 import useActionSettings, { Mode, MODES } from "./useActionSettings";
+import useFilterSettings from "./useFilterSettings";
+import useScaleSettings from "./useScaleSettings";
 
 const useEditorEngine = (initialState : EditorState) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
@@ -44,6 +48,8 @@ const useEditorEngine = (initialState : EditorState) => {
     const mode = actionSettings.ref.current.mode;
     const {isDrawing, isInside} = actionSettings.ref.current;
     const drawSettings = useDrawSettings();
+    const filterSettings = useFilterSettings();
+    const scaleSettings = useScaleSettings();
     //state - end
 
     if(engineRef.current === null){
@@ -52,27 +58,34 @@ const useEditorEngine = (initialState : EditorState) => {
 
     const dispatch = useCallback((command: Command) => {
         engineRef.current!.dispatch(command);
+        editorStateRef.current = engineRef.current!.getState();
         forceUpdate((v) => v + 1);
     }, []);
 
-    const render = () => useCallback(() => {
+    const render = useCallback(() => {
         renderEditorState(editorStateRef.current, contexts); 
-    }, []);
+    }, [contexts]);
+
+    const forceRender = useCallback(() => {
+        editorStateRef.current = engineRef.current!.getState();
+        render();
+        forceUpdate((v) => v + 1);
+    }, [render]);
 
     const undo = useCallback(() => {
         engineRef.current!.undo();
-        forceUpdate((v) => v + 1);
-    }, []);
+        forceRender();
+    }, [forceRender]);
 
     const redo = useCallback(() => {
         engineRef.current!.redo();
-        forceUpdate((v) => v + 1);
-    }, []);
+        forceRender();
+    }, [forceRender]);
 
     const reset = useCallback(() => {
         engineRef.current!.reset();
-        forceUpdate((v) => v + 1);
-    }, []);
+        forceRender();
+    }, [forceRender]);
 
     const handlePointerDown = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {        
         const canvasRef = canvasRefs.interactions;
@@ -215,6 +228,15 @@ const useEditorEngine = (initialState : EditorState) => {
     //UI Setters
     const setMode = (mode: Mode) => actionSettings.update({mode: mode}); 
     const setDrawTool = (tool: Tool) => drawSettings.update({tool: tool});
+    const setEditedImage = (src : string) => {
+        const img = new Image();
+        img.src = src;
+        img.onload = () => {
+            const prevImage = engineRef.current!.getState().backgroundImage;
+            dispatch(setBackgroundImageCommand(img, prevImage));
+            render();
+        }
+    }
 
     return {
         containerRef,
@@ -238,6 +260,7 @@ const useEditorEngine = (initialState : EditorState) => {
         render,
         getState: () => engineRef.current!.getState(),
         generateEditedImage,
+        setEditedImage,
         
         handlePointerDown,
         handlePointerMove,

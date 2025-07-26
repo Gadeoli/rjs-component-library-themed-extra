@@ -1,36 +1,50 @@
 import uuid from "../../../helpers/uuid";
 import { CanvasContexts } from "../hooks/useCanvasLayerRefs";
-import { DRAW_TOOLS, DrawSettings } from "../hooks/useDrawSettings";
+import { DRAW_TOOLS } from "../hooks/useDrawSettings";
 import { Command, DrawingObject, EditorState, Point, TextObject } from "../hooks/useEditorEngine.types";
 
 export const initialPoint = {x: 0, y: 0};
 
+const hasAllLayers = (ctxs: CanvasContexts) : ctxs is CanvasContexts & { background: HTMLCanvasElement, drawings: HTMLCanvasElement, texts: HTMLCanvasElement, interactions: HTMLCanvasElement } => ctxs.background !== null && ctxs.drawings !== null && ctxs.texts !== null && ctxs.interactions !== null;
+
 export const renderEditorState = (state: EditorState, ctxs: CanvasContexts) => {
-    const {
-        background,
-        drawings,
-        texts,
-        interactions
-    } = ctxs;
+    if (!hasAllLayers(ctxs)) return;
 
-    if (!background || !drawings || !texts || interactions) return;
-
-    renderBackgroundLayer(state, background);
-    renderDrawingsLayer(state, drawings);
-    renderTextsLayer(state, texts);
+    renderBackgroundLayer(state, ctxs);
+    renderDrawingsLayer(state, ctxs.drawings);
+    renderTextsLayer(state, ctxs.texts);
 }
 
-export const renderBackgroundLayer = (state: EditorState, ctx: CanvasRenderingContext2D) => {
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+export const renderBackgroundLayer = (state: EditorState, ctxs: CanvasContexts) => {
+    if (!hasAllLayers(ctxs)) return;
 
-    if (state.backgroundImage) {
-        ctx.drawImage(state.backgroundImage, 0, 0, ctx.canvas.width, ctx.canvas.height);
+    const bgCanvas = ctxs.background.canvas;
+    const drawCanvas = ctxs.drawings.canvas;
+    const textCanvas = ctxs.texts.canvas;
+    const interCanvas = ctxs.interactions.canvas;
+
+    if(state.backgroundImage){
+        const w = state.backgroundImage.width;
+        const h = state.backgroundImage.height;
+
+        bgCanvas.width = w;
+        bgCanvas.height = h;
+
+        drawCanvas.width = w;
+        drawCanvas.height = h;
+
+        textCanvas.width = w;
+        textCanvas.height = h;
+
+        interCanvas.width = w;
+        interCanvas.height = h;
+        
+        ctxs.background.drawImage(state.backgroundImage, 0, 0, w, h);
     }
 }
 
 export const renderDrawingsLayer = (state: EditorState, ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-
     for (const obj of state.objects) {
         if (obj.type === "drawing") {
             if([DRAW_TOOLS.PEN, DRAW_TOOLS.ERASER].includes(obj.tool)){
@@ -61,7 +75,7 @@ export const addDrawingCommand = (drawing: DrawingObject) : Command => {
     return {
         id,
         label: 'add-drawing',
-        apply: (state) => ({
+        do: (state) => ({
             ...state,
             objects: [...state.objects, drawing],
         }),
@@ -70,6 +84,27 @@ export const addDrawingCommand = (drawing: DrawingObject) : Command => {
             objects: state.objects.filter(obj => obj.id !== id)
         }),
         affectedLayers: ["drawings"],
+    };
+}
+
+export const setBackgroundImageCommand = (
+    image: HTMLImageElement,
+    prevImage: HTMLImageElement | null
+): Command => {
+    const id = uuid(); 
+
+    return {
+        id,
+        label: 'background-image-set',
+        do: (state) => ({
+            ...state,
+            backgroundImage: image,
+        }),
+        undo: (state) => ({
+            ...state,
+            backgroundImage: prevImage
+        }),
+        affectedLayers: ["background"],
     };
 }
 
