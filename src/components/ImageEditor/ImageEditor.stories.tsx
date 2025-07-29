@@ -144,7 +144,7 @@ export const Default: Story = {
 
             <ImageEditor {...{...args, src}} onSaveImage={(props : any) => setSavedSrc(props.src)}/>
 
-            <img src={savedSrc} alt='saved img - preview' style={{width: '300px', marginTop: '40px'}}/>
+            {savedSrc && <img src={savedSrc} alt='saved img - preview' style={{width: '300px', marginTop: '40px'}}/>}
         </div>)
     }
 };

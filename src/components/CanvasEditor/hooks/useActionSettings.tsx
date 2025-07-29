@@ -12,6 +12,7 @@ export type Mode = MODES.DRAW | MODES.WRITE | MODES.PAN;
 export interface ActionSettings {
     mode: Mode;
     isDrawing: boolean;
+    isDragging: boolean;
     isInside: boolean;
     pointer: string;
     offset: Point;
@@ -21,6 +22,7 @@ const useActionSettings = (initial?: Partial<ActionSettings>) => {
     const defaultSettings: ActionSettings = {
         mode: MODES.DRAW,
         isDrawing: false,
+        isDragging: false,
         isInside: false,
         pointer: 'default',
         offset: {x: 0, y: 0},

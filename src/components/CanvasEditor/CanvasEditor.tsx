@@ -34,6 +34,7 @@ const CanvasEditor: FC<DefaultProps> = ({
     onCancel,
     onSaveToImage,
 }) => {
+    const [, forceUpdate] = useState(0);
     const { theme } = useTheme();
     const editorEngine = useEditorEngine(
         initialState, 
@@ -395,6 +396,10 @@ const ActionButton = ({
 
 const ActionToggle = ({label, children, defaultIcon} : {label: LabelProps, children: any, defaultIcon: string}) => {
     const {theme} = useTheme();
+
+    useEffect(() => {
+        console.log(theme);
+    })
 
     return (<ActionButtonMimicStyled theme={theme}>
         <CardToggle

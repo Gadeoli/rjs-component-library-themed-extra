@@ -2,6 +2,7 @@ import uuid from "../../../helpers/uuid";
 import { CanvasContexts, CanvasRefs } from "../hooks/useCanvasLayerRefs";
 import { DRAW_TOOLS } from "../hooks/useDrawSettings";
 import { Command, DrawingObject, EditorState, FilterObject, Point, ScaleObject, TextObject } from "../hooks/useEditorEngine.types";
+import { ScaleSettings } from "../hooks/useScaleSettings";
 
 export const initialPoint = {x: 0, y: 0};
 
@@ -363,13 +364,17 @@ export const clearLayer = (
 export const getMousePos = (
     e: React.MouseEvent<HTMLCanvasElement>, 
     canvasRef: React.RefObject<HTMLCanvasElement | null>,
-    offset: Point = initialPoint,
-    zoom: number = 1,
-    flipX: boolean = false,
-    flipY: boolean = false,
-    rotate: number = 0,
+    scaleSettings: ScaleSettings
 ): Point => {
     const defaultPos = initialPoint;
+
+    const {
+        flipHorizontal,
+        flipVertical,
+        zoom,
+        rotate,
+        offset
+    } = scaleSettings
     
     const canvas = canvasRef.current;
     const rect = canvas?.getBoundingClientRect();
@@ -399,10 +404,10 @@ export const getMousePos = (
     y /= zoom;
 
     // Apply flip correction
-    if (flipX) x = canvas.width - x;
-    if (flipY) y = canvas.height - y;
+    if (flipHorizontal) x = canvas.width - x;
+    if (flipVertical) y = canvas.height - y;
 
-    // Step 5: undo rotation (about center)
+    // Undo rotation (about center)
     const cx = canvas.width / 2;
     const cy = canvas.height / 2;
     const dx = x - cx;

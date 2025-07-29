@@ -1,10 +1,12 @@
 import { useRef, useState, useCallback } from 'react';
+import { Point } from './useEditorEngine.types';
 
 export interface ScaleSettings {
     flipHorizontal: boolean,
     flipVertical: boolean,
     zoom: number,
-    rotate: number
+    rotate: number,
+    offset: Point
 }
 
 const useScaleSettings = (initial?: Partial<ScaleSettings>) => {
@@ -13,6 +15,7 @@ const useScaleSettings = (initial?: Partial<ScaleSettings>) => {
         flipVertical: false,
         zoom: 1,
         rotate: 0,
+        offset: {x: 0, y: 0},
         ...initial,
     };
 

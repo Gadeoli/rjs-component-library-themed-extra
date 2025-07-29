@@ -20,6 +20,7 @@ import {
     generateCanvasImage,
     getBiggerSize,
     getMousePos,
+    initialPoint,
     renderEditorState, 
     setBackgroundImageCommand,
     setCanvasSizeFromImage,
@@ -70,7 +71,7 @@ const useEditorEngine = (
     const [, forceUpdate] = useState(0);
     const actionSettings = useActionSettings();
     const mode = actionSettings.ref.current.mode;
-    const {isDrawing, isInside} = actionSettings.ref.current;
+    const {isDrawing, isDragging, isInside} = actionSettings.ref.current;
     const drawSettings = useDrawSettings();
     const filterSettings = useFilterSettings();
     const scaleSettings = useScaleSettings();
@@ -110,10 +111,16 @@ const useEditorEngine = (
     const handlePointerDown = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {        
         const canvasRef = canvasRefs.interactions;
         const ctx = contexts.interactions;
+        const scales = scaleSettings.ref.current;
 
         if(canvasRef && ctx){
+            const mousePos = getMousePos(
+                event, 
+                canvasRef,
+                scales
+            );
+
             if(mode === MODES.DRAW){
-                const mousePos = getMousePos(event, canvasRef);
                 const tool = drawSettings.ref.current.tool;
                 const isErase = DRAW_TOOLS.ERASER === tool;
 
@@ -130,6 +137,15 @@ const useEditorEngine = (
                         erase: isErase,
                     });
                 }
+            }else if( mode === MODES.PAN ){
+                actionSettings.update({isDragging: true});
+
+                const x = event.clientX - (scales.flipHorizontal ? -scales.offset.x : scales.offset.x);
+                const y = event.clientY - (scales.flipVertical ? -scales.offset.y : scales.offset.y);
+
+                currentPath.push({x, y});
+            }else{
+                //nothing
             }
         }
     }, [mode, drawSettings, contexts]);
@@ -137,10 +153,12 @@ const useEditorEngine = (
     const handlePointerMove = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {        
         const canvasRef = canvasRefs.interactions;
         const ctx = contexts.interactions;
+        const scales = scaleSettings.ref.current;
 
         if(canvasRef && ctx){
+            const mousePos = getMousePos(event, canvasRef, scales);
+
             if(mode === MODES.DRAW && isDrawing && isInside){
-                const mousePos = getMousePos(event, canvasRef);
                 const tool = drawSettings.ref.current.tool;
                 const stgs = {
                     points: currentPath.paths.current,
@@ -176,9 +194,27 @@ const useEditorEngine = (
                         drawCircle(ctx, stgs)
                     }
                 }
+            }else if(mode === MODES.PAN && isDragging){
+                if (event.cancelable) {
+                    event.preventDefault();
+                }
+
+                const initialPos = currentPath.paths.current[0] || initialPoint;
+                const offsetDelta = {
+                    x: event.clientX - initialPos.x,
+                    y: event.clientY - initialPos.y
+                };
+
+                const newPos = {
+                    x: scales.flipHorizontal ? -offsetDelta.x : offsetDelta.x,
+                    y: scales.flipVertical ? -offsetDelta.y : offsetDelta.y
+                }
+                
+                currentPath.push(newPos);
+                scaleSettings.update({offset: newPos});
             }
         }
-    }, [mode, drawSettings, isDrawing]);
+    }, [mode, drawSettings, isDrawing, isDragging]);
 
     const handlePointerUp = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {        
             const canvasRef = canvasRefs.interactions;
@@ -201,6 +237,8 @@ const useEditorEngine = (
                     clearLayer(ctx);
 
                     actionSettings.update({isDrawing: false});
+                }else if(mode === MODES.PAN && isDragging){
+                    
                 }
             }
     }, [mode, isDrawing]);
