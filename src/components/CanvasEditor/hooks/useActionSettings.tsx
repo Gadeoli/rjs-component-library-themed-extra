@@ -4,9 +4,10 @@ import { Point } from './useEditorEngine.types';
 export enum MODES {
     DRAW='draw',
     WRITE='write',
+    PAN='panning',
 }
 
-export type Mode = MODES.DRAW | MODES.WRITE;
+export type Mode = MODES.DRAW | MODES.WRITE | MODES.PAN;
 
 export interface ActionSettings {
     mode: Mode;
@@ -30,7 +31,12 @@ const useActionSettings = (initial?: Partial<ActionSettings>) => {
     const ref = useRef<ActionSettings>(defaultSettings);
 
     const update = useCallback((settings: Partial<ActionSettings>) => {
-        const newPointer =  settings.mode === MODES.DRAW ? 'crosshair' : 'default';
+        const mode = settings.mode || ref.current.mode;
+
+        const newPointer =  mode === MODES.DRAW ? 'crosshair' :
+                            mode === MODES.PAN ? 'grab' :
+                            'default';
+
         ref.current = { ...ref.current, ...settings, pointer: newPointer};
         setUiState((prev) => ({ ...prev, ...settings, pointer: newPointer}));
     }, []);

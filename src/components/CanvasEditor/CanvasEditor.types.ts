@@ -59,18 +59,26 @@ export interface ExportToImageProps {
 
 export interface TranslationsProps {
     arrow: LabelProps,
+    brightness: LabelProps,
     cancel: LabelProps,
     circle: LabelProps,
+    contrast: LabelProps,
     draw: LabelProps,
+    eraser: LabelProps,
+    filters: LabelProps,
+    grayscale: LabelProps,
+    line: LabelProps,
+    pan_zoom: LabelProps,
+    pen: LabelProps,
     redo: LabelProps,
     restore: LabelProps,
-    settings: LabelProps,
-    eraser: LabelProps,
-    line: LabelProps,
-    pen: LabelProps,
+    rotate: LabelProps,
     save: LabelProps,
     shapes: LabelProps,
+    settings: LabelProps,
+    saturate: LabelProps,
     undo: LabelProps,
+    zoom: LabelProps
 }
 
 export interface LabelProps {

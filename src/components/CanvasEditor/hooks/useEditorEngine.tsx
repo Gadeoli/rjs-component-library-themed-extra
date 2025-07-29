@@ -1,6 +1,7 @@
 import { 
     useCallback,
     useEffect,
+    useMemo,
     useRef, 
     useState
 } from "react";
@@ -21,7 +22,9 @@ import {
     getMousePos,
     renderEditorState, 
     setBackgroundImageCommand,
-    setCanvasSizeFromImage
+    setCanvasSizeFromImage,
+    updateFiltersCommand,
+    updateScalesCommand
 } from "../utils/helpers";
 import { useCanvasLayerRefs } from "./useCanvasLayerRefs";
 import createEditorEngine from "../utils/engine";
@@ -29,31 +32,42 @@ import { EditorEngine } from "../utils/engine.types";
 import useCurrentPath from "./useCurrentPath";
 import useDrawSettings, { DRAW_TOOLS, DrawSettings, Tool } from "./useDrawSettings";
 import useActionSettings, { Mode, MODES } from "./useActionSettings";
-import useFilterSettings from "./useFilterSettings";
-import useScaleSettings from "./useScaleSettings";
+import useFilterSettings, { FilterSettings } from "./useFilterSettings";
+import useScaleSettings, { ScaleSettings } from "./useScaleSettings";
 import { useElementSize } from "@gadeoli/rjs-hooks-library";
 import uuid from "../../../helpers/uuid";
 import { getBestBrushSizePt } from "../../../helpers/editor";
 import { useElementResizeObserver } from "./useElementResizeObserver";
+import useWindowScrollLock from "./useWindowScrollLock";
+import { debounce } from "../../../helpers";
 
 const useEditorEngine = (
     initialState : EditorState,
     configs?: EditorConfig 
 ) => {
+    //refs
     const containerRef = useRef<HTMLDivElement | null>(null);
     const containerSize = useElementSize(containerRef);
-    const { canvasRefs, contexts } = useCanvasLayerRefs(containerRef);
     const engineRef = useRef<EditorEngine | null>(null);
-    const currentPath = useCurrentPath();
-
+    const canvasInsideRef = useRef<boolean>(false); //keep info if pointer is inside canvas
     const editorStateRef = useRef<EditorState>({
         backgroundImage: null,
         objects: [],
         selectedObjectIds: []
     });
 
+    if(engineRef.current === null){
+        engineRef.current = createEditorEngine(initialState)
+    }
+
+    //hooks
+    const currentPath = useCurrentPath();
+    const { canvasRefs, contexts } = useCanvasLayerRefs(containerRef);
+    const contextsRef = useRef(contexts) //use this inside debounce dispatch commands
+    const { enableScrollLock, disableScrollLock } = useWindowScrollLock();
+
     //state
-    const [update, forceUpdate] = useState(0);
+    const [, forceUpdate] = useState(0);
     const actionSettings = useActionSettings();
     const mode = actionSettings.ref.current.mode;
     const {isDrawing, isInside} = actionSettings.ref.current;
@@ -61,10 +75,6 @@ const useEditorEngine = (
     const filterSettings = useFilterSettings();
     const scaleSettings = useScaleSettings();
     //state - end
-
-    if(engineRef.current === null){
-        engineRef.current = createEditorEngine(initialState)
-    }
 
     const dispatch = useCallback((command: Command) => {
         engineRef.current!.dispatch(command);
@@ -197,11 +207,19 @@ const useEditorEngine = (
 
     const handlePointerOut = (event: React.PointerEvent<HTMLCanvasElement>) => {        
         actionSettings.update({isInside: false});
+        canvasInsideRef.current = false;
+        disableScrollLock();
     }
 
     const handlePointerEnter = (event: React.PointerEvent<HTMLCanvasElement>) => {        
         actionSettings.update({isInside: true});
+        canvasInsideRef.current = true;
+        enableScrollLock();
     }
+
+    const handleWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {  
+        debouncedWheel(event.deltaY);
+    };
 
     /**
      * Generates a image source from the canvas content.
@@ -250,10 +268,46 @@ const useEditorEngine = (
             drawSettings.update({
                 brushSize: getBestBrushSizePt(biggerSize)
             });
+            
             dispatch(setBackgroundImageCommand(image, prevImage));
+
             render();
         }
     };
+    const setFilters = (values: Partial<FilterSettings>) => {
+        filterSettings.update(values)
+
+        debounced500Action(
+            () => {
+                dispatch(
+                    updateFiltersCommand({
+                        id: uuid(),
+                        type: 'filter',
+                        values: filterSettings.ref.current
+                    })
+                )
+
+                forceRender()                
+            }
+        )
+    };
+    const setScales = (values: Partial<ScaleSettings>) => {
+        scaleSettings.update(values)
+
+        debounced500Action(
+            () => {
+                dispatch(
+                    updateScalesCommand({
+                        id: uuid(),
+                        type: 'scale',
+                        values: scaleSettings.ref.current
+                    })
+                )
+
+                forceRender()                
+            }
+        )
+    }
 
     //rerender image on resize
     useElementResizeObserver(containerRef, contexts, (size) => {
@@ -273,6 +327,33 @@ const useEditorEngine = (
         }  
     })
 
+    const debouncedWheel = useRef(
+        debounce((deltaY: number) => {
+            if(!canvasInsideRef.current || mode !== MODES.PAN) return;
+
+            let newZoom = (Number)(scaleSettings.ref.current.zoom.toFixed(2));
+
+            if (deltaY < 0) {
+                newZoom += 0.1;
+            }else{
+                newZoom -= 0.1;
+            }
+
+            scaleSettings.update({zoom: newZoom})
+        }, 200)
+    ).current;
+
+    const debounced500Action = useRef(
+        debounce((action: any) => {
+            action();
+        }, 500)
+    ).current;
+
+    //avoid useEffect when possible
+    useEffect(() => {
+        contextsRef.current = contexts;
+    }, [contexts]);
+
     return {
         containerRef,
         canvasRefs,
@@ -284,10 +365,14 @@ const useEditorEngine = (
         canUndo: engineRef.current!.canUndo(),
         canRedo: engineRef.current!.canRedo(),
         canReset: engineRef.current!.canReset(),
+        filters: filterSettings.ui,
+        scales: scaleSettings.ui,
 
         setMode,
         setDrawTool,
         setDrawPallete: (stg : Partial<DrawSettings>) => drawSettings.update(stg),
+        setFilters: (values : Partial<FilterSettings>) => setFilters(values),
+        setScales: (values : Partial<ScaleSettings>) => setScales(values),
         dispatch,
         undo,
         redo,
@@ -301,7 +386,8 @@ const useEditorEngine = (
         handlePointerMove,
         handlePointerUp,
         handlePointerOut,
-        handlePointerEnter
+        handlePointerEnter,
+        handleWheel
     };
 };
 

@@ -9,7 +9,7 @@ export type EditorEngine = {
     
     canUndo: () => boolean;
     canRedo: () => boolean;
-    canReset: () => boolean,
+    canReset: () => boolean;
     // getHistory: () => {
     //     undoStack: Command[];
     //     redoStack: Command[];
