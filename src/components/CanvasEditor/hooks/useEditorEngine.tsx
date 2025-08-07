@@ -129,7 +129,7 @@ const useEditorEngine = (
                 actionSettings.update({isDrawing: true});
                 drawSettings.update({erase: isErase ? true : false});
 
-                //only pen has the first point in the canvas
+                //only pen/erase has the first point in the canvas
                 if([DRAW_TOOLS.PEN, DRAW_TOOLS.ERASER].includes(tool)){
                     drawStroke(ctx, {
                         points: currentPath.paths.current, 
@@ -186,12 +186,14 @@ const useEditorEngine = (
                     //very interesting for a future tool
                     clearLayer(ctx);
 
-                    if(tool === DRAW_TOOLS.LINE){
-                        drawLine(ctx, stgs)
-                    }else if(tool === DRAW_TOOLS.ARROW){
-                        drawArrow(ctx, stgs)
-                    }else if(tool === DRAW_TOOLS.CIRCLE){
-                        drawCircle(ctx, stgs)
+                    if(stgs.points.length === 2){
+                        if(tool === DRAW_TOOLS.LINE){
+                            drawLine(ctx, stgs)
+                        }else if(tool === DRAW_TOOLS.ARROW){
+                            drawArrow(ctx, stgs)
+                        }else if(tool === DRAW_TOOLS.CIRCLE){
+                            drawCircle(ctx, stgs)
+                        }
                     }
                 }
             }else if(mode === MODES.PAN && isDragging){
@@ -217,37 +219,16 @@ const useEditorEngine = (
     }, [mode, drawSettings, isDrawing, isDragging]);
 
     const handlePointerUp = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {        
-            const canvasRef = canvasRefs.interactions;
-            const ctx = contexts.interactions;
-
-            if(canvasRef && ctx){
-                if(mode === MODES.DRAW && isDrawing){
-                    const mousePos = getMousePos(event, canvasRef);
-                    currentPath.push(mousePos);
-
-                    dispatch(addDrawingCommand({
-                        id: uuid(),
-                        type: 'drawing',
-                        points: currentPath.paths.current,
-                        ...drawSettings.ref.current
-                    }));
-
-                    currentPath.reset();
-
-                    clearLayer(ctx);
-
-                    actionSettings.update({isDrawing: false});
-                }else if(mode === MODES.PAN && isDragging){
-                    
-                }
-            }
+        onPointerUpOrExitCanvas(event)
     }, [mode, isDrawing]);
 
-    const handlePointerOut = (event: React.PointerEvent<HTMLCanvasElement>) => {        
+    const handlePointerOut = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {        
+        onPointerUpOrExitCanvas(event);
+
         actionSettings.update({isInside: false});
         canvasInsideRef.current = false;
         disableScrollLock();
-    }
+    }, [mode, isDrawing]);
 
     const handlePointerEnter = (event: React.PointerEvent<HTMLCanvasElement>) => {        
         actionSettings.update({isInside: true});
@@ -258,6 +239,50 @@ const useEditorEngine = (
     const handleWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {  
         debouncedWheel(event.deltaY);
     };
+
+    const onPointerUpOrExitCanvas = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {        
+        const canvasRef = canvasRefs.interactions;
+        const ctx = contexts.interactions;
+        const tool = drawSettings.ref.current.tool;
+
+        if(canvasRef && ctx){
+            if(mode === MODES.DRAW && isDrawing){
+                const mousePos = getMousePos(event, canvasRef, scaleSettings.ref.current);
+                
+                if([DRAW_TOOLS.PEN, DRAW_TOOLS.ERASER].includes(tool)){
+                    currentPath.push(mousePos);
+                }else if([
+                    DRAW_TOOLS.LINE, 
+                    DRAW_TOOLS.ARROW, 
+                    DRAW_TOOLS.CIRCLE
+                ].includes(tool)){
+                    if(currentPath.paths.current.length > 0){
+                        currentPath.set([
+                            currentPath.paths.current[0],
+                            mousePos
+                        ])
+                    }else{
+                        currentPath.push(mousePos);
+                    }
+                }
+
+                dispatch(addDrawingCommand({
+                    id: uuid(),
+                    type: 'drawing',
+                    points: currentPath.paths.current,
+                    ...drawSettings.ref.current
+                }));
+
+                currentPath.reset();
+
+                clearLayer(ctx);
+
+                actionSettings.update({isDrawing: false});
+            }else if(mode === MODES.PAN && isDragging){
+                
+            }
+        }
+    }, [mode, isDrawing]);
 
     /**
      * Generates a image source from the canvas content.

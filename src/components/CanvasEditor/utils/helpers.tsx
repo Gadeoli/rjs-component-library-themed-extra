@@ -64,7 +64,7 @@ export const renderAllLayer = (state: EditorState, ctxs: CanvasContexts) => {
     const scales = state.objects.filter(obj => obj.type === "scale");
 
     if(scales.length){
-        console.log(scales);
+        console.log({scales});
     }
 }
 

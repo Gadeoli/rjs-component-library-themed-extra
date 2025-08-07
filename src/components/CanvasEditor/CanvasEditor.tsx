@@ -398,7 +398,7 @@ const ActionToggle = ({label, children, defaultIcon} : {label: LabelProps, child
     const {theme} = useTheme();
 
     useEffect(() => {
-        console.log(theme);
+        // console.log(theme);
     })
 
     return (<ActionButtonMimicStyled theme={theme}>
