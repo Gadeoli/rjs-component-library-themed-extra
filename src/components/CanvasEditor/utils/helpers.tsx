@@ -174,7 +174,9 @@ export const drawStroke = (
 
     if(!points) return;
 
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    if(!obj.erase){
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    }
 
     ctx.save();
     styleCtx(ctx, obj);

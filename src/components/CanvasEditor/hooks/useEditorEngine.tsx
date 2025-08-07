@@ -153,9 +153,10 @@ const useEditorEngine = (
     const handlePointerMove = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {        
         const canvasRef = canvasRefs.interactions;
         const ctx = contexts.interactions;
+        const drawingsCtx = contexts.drawings; //for erase
         const scales = scaleSettings.ref.current;
 
-        if(canvasRef && ctx){
+        if(canvasRef && ctx && drawingsCtx){
             const mousePos = getMousePos(event, canvasRef, scales);
 
             if(mode === MODES.DRAW && isDrawing && isInside){
@@ -167,7 +168,8 @@ const useEditorEngine = (
 
                 if([DRAW_TOOLS.PEN, DRAW_TOOLS.ERASER].includes(tool)){
                     currentPath.push(mousePos);
-                    drawStroke(ctx, {...stgs, erase: DRAW_TOOLS.ERASER === tool});
+                    const targetCtx = tool === DRAW_TOOLS.ERASER ? drawingsCtx : ctx;
+                    drawStroke(targetCtx, {...stgs, erase: DRAW_TOOLS.ERASER === tool});
                 }else if([
                     DRAW_TOOLS.LINE, 
                     DRAW_TOOLS.ARROW, 
