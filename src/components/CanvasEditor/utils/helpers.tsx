@@ -126,7 +126,7 @@ export const updateFiltersCommand = (filtering: FilterObject): Command => {
 }
 
 export const updateScalesCommand = (scalling: ScaleObject): Command => {
-    const id = uuid(); 
+    const id = uuid();
 
     return {
         id,

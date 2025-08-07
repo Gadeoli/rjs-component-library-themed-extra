@@ -198,7 +198,7 @@ const useEditorEngine = (
                         }
                     }
                 }
-            }else if(mode === MODES.PAN && isDragging){
+            }else if(mode === MODES.PAN && isDragging && isInside){
                 if (event.cancelable) {
                     event.preventDefault();
                 }
@@ -215,14 +215,15 @@ const useEditorEngine = (
                 }
                 
                 currentPath.push(newPos);
-                scaleSettings.update({offset: newPos});
+                // scaleSettings.update({offset: newPos}); //now updated inside setScales
+                setScales({offset: newPos})
             }
         }
     }, [mode, drawSettings, isDrawing, isDragging]);
 
     const handlePointerUp = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {        
         onPointerUpOrExitCanvas(event)
-    }, [mode, isDrawing]);
+    }, [mode, isDrawing, isDragging]);
 
     const handlePointerOut = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {        
         onPointerUpOrExitCanvas(event);
@@ -239,7 +240,22 @@ const useEditorEngine = (
     }
 
     const handleWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {  
-        debouncedWheel(event.deltaY);
+        debounced250Action(
+            () => {
+                if(!canvasInsideRef.current || mode !== MODES.PAN) return;
+
+                let newZoom = (Number)(scaleSettings.ref.current.zoom.toFixed(2));
+
+                if (event.deltaY < 0) {
+                    newZoom += 0.1;
+                }else{
+                    newZoom -= 0.1;
+                }
+
+                // scaleSettings.update({zoom: newZoom}) //now updated inside setScales          
+                setScales({zoom: newZoom})
+            }
+        )
     };
 
     const onPointerUpOrExitCanvas = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {        
@@ -248,9 +264,9 @@ const useEditorEngine = (
         const tool = drawSettings.ref.current.tool;
 
         if(canvasRef && ctx){
+            const mousePos = getMousePos(event, canvasRef, scaleSettings.ref.current);
+            
             if(mode === MODES.DRAW && isDrawing){
-                const mousePos = getMousePos(event, canvasRef, scaleSettings.ref.current);
-                
                 if([DRAW_TOOLS.PEN, DRAW_TOOLS.ERASER].includes(tool)){
                     currentPath.push(mousePos);
                 }else if([
@@ -281,10 +297,10 @@ const useEditorEngine = (
 
                 actionSettings.update({isDrawing: false});
             }else if(mode === MODES.PAN && isDragging){
-                
+                actionSettings.update({isDragging: false});
             }
         }
-    }, [mode, isDrawing]);
+    }, [mode, isDrawing, isDragging]);
 
     /**
      * Generates a image source from the canvas content.
@@ -392,20 +408,10 @@ const useEditorEngine = (
         }  
     })
 
-    const debouncedWheel = useRef(
-        debounce((deltaY: number) => {
-            if(!canvasInsideRef.current || mode !== MODES.PAN) return;
-
-            let newZoom = (Number)(scaleSettings.ref.current.zoom.toFixed(2));
-
-            if (deltaY < 0) {
-                newZoom += 0.1;
-            }else{
-                newZoom -= 0.1;
-            }
-
-            scaleSettings.update({zoom: newZoom})
-        }, 200)
+    const debounced250Action = useRef(
+        debounce((action: any) => {
+            action();
+        }, 250)
     ).current;
 
     const debounced500Action = useRef(
