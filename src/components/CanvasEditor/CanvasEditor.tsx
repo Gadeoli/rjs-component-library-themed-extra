@@ -1,8 +1,8 @@
-import React, { FC, MouseEventHandler, useEffect, useMemo, useState } from 'react';
+import React, { FC, MouseEventHandler, useEffect, useMemo, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { DefaultProps, LabelProps, TranslationsProps } from './CanvasEditor.types';
 import { handleCssClassnames } from '@gadeoli/js-helpers-library';
-import { Button, CardToggle, defaultRadius, defaultXPM, defaultYPM, Input, InputColor, Span, Tooltip, useTheme } from '@gadeoli/rjs-component-library-themed';
+import { Button, CardToggle, defaultRadius, defaultXPM, defaultYPM, Input, InputColor, Label, Range, Span, Tooltip, useTheme } from '@gadeoli/rjs-component-library-themed';
 import { 
     // addDrawingCommand, 
     defaultLabels, 
@@ -14,7 +14,7 @@ import { EditorState } from './hooks/useEditorEngine.types';
 import { MODES } from './hooks/useActionSettings';
 import { DRAW_TOOLS } from './hooks/useDrawSettings';
 import { transparentize } from 'polished';
-import { useGhostInFirstRender } from '@gadeoli/rjs-hooks-library';
+import { useElementSize, useGhostInFirstRender } from '@gadeoli/rjs-hooks-library';
 
 const initialState: EditorState = {
     backgroundImage: null,
@@ -34,6 +34,7 @@ const CanvasEditor: FC<DefaultProps> = ({
     onCancel,
     onSaveToImage,
 }) => {
+    const [, forceUpdate] = useState(0);
     const { theme } = useTheme();
     const editorEngine = useEditorEngine(
         initialState, 
@@ -51,22 +52,29 @@ const CanvasEditor: FC<DefaultProps> = ({
         canUndo,
         canRedo,
         canReset,
+        filters,
+        scales,
         
         dispatch,
         getState,
         undo,
         redo,
         reset,
+        setFilters,
+        setScales,        
         generateEditedImage,
         setEditedImage,
-
+        
         handlePointerDown,
         handlePointerMove,
         handlePointerUp,
         handlePointerOut,
-        handlePointerEnter
+        handlePointerEnter,
+        handleWheel
     } = editorEngine;
     const containerVisible = useGhostInFirstRender();
+    const actionContainerRef = useRef(null);
+    const actionContainerSize = useElementSize(actionContainerRef);
 
     const classNames = handleCssClassnames([
         'cl-canvas-editor',
@@ -106,8 +114,8 @@ const CanvasEditor: FC<DefaultProps> = ({
     }, [backgroundSrc])
 
     return <Container theme={theme} className={classNames} style={style} $visible={containerVisible}>
-        <ActionConteiner theme={theme}>
-            <ActionBlock>
+        <ActionConteiner theme={theme} ref={actionContainerRef}>
+            <ActionBlock className='pencils'>
                 <ActionButton
                     settings={editorEngine}
                     action={{
@@ -126,7 +134,7 @@ const CanvasEditor: FC<DefaultProps> = ({
                     label={labels.eraser}
                     defaultIcon='&#x232B;'
                 />
-                <ActionToggle label={labels.shapes}>
+                {type !== 'signature-editor' ? (<ActionToggle label={labels.shapes} defaultIcon='&#x2621;'>
                     <CardToggleContainer theme={theme}>
                         <ActionButton
                             settings={editorEngine}
@@ -156,13 +164,17 @@ const CanvasEditor: FC<DefaultProps> = ({
                             defaultIcon='&#9711;'
                         />
                     </CardToggleContainer>            
-                </ActionToggle>
+                </ActionToggle>) : ('')}
+                
                 <ActionButton
                     settings={editorEngine}
                     onClick={() => setShowSubActions(!showSubActions)}
                     label={labels.settings}
                     defaultIcon=' &#9881;'
                 />   
+                
+                <ActionPipe theme={theme}><SmallPipe theme={theme}/></ActionPipe>
+
                 <ActionButton
                     settings={editorEngine}
                     onClick={() => reset()}
@@ -183,9 +195,62 @@ const CanvasEditor: FC<DefaultProps> = ({
                     label={labels.redo}
                     defaultIcon='&#8631;'
                     disabled={!canRedo}
-                />           
+                />   
+
+                <ActionPipe theme={theme}><SmallPipe theme={theme}/></ActionPipe>
+
+                {type !== 'signature-editor' ? (<ActionToggle label={labels.filters} defaultIcon='&#9929;'>
+                    <CardToggleContainer theme={theme}>
+                        <ActionSlider
+                            name='brightness'
+                            value={filters.brightness}
+                            min={0}
+                            max={200}
+                            step={1}
+                            label={labels.brightness}
+                            onChange={(value: number) => {setFilters({brightness: value})}}
+                        />
+                        <ActionSlider
+                            name='contrast'
+                            value={filters.contrast}
+                            min={0}
+                            max={200}
+                            step={1}
+                            label={labels.contrast}
+                            onChange={(value: number) => {setFilters({contrast: value})}}
+                        />
+                        <ActionSlider
+                            name='saturate'
+                            value={filters.saturate}
+                            min={0}
+                            max={200}
+                            step={1}
+                            label={labels.saturate}
+                            onChange={(value: number) => {setFilters({saturate: value})}}
+                        />
+                        <ActionSlider
+                            name='grayscale'
+                            value={filters.grayscale}
+                            min={0}
+                            max={100}
+                            step={1}
+                            label={labels.grayscale}
+                            onChange={(value: number) => {setFilters({grayscale: value})}}
+                        />
+                    </CardToggleContainer>        
+                </ActionToggle>) : ('')}
+
+                {type !== 'signature-editor' ? (<ActionButton
+                    settings={editorEngine}
+                    action={{
+                        mode: MODES.PAN,
+                    }}
+                    onClick={() => setShowSubActions(!showSubActions)}
+                    label={labels.pan_zoom}
+                    defaultIcon='P'
+                />) : ('')} 
             </ActionBlock>
-            <ActionBlock style={{justifyContent: 'flex-end'}}>
+            <ActionBlock className='window' style={{justifyContent: 'flex-end'}}>
                 <ActionButton
                     settings={editorEngine}
                     onClick={ async (e: any) => {
@@ -193,7 +258,7 @@ const CanvasEditor: FC<DefaultProps> = ({
                         onSaveToImage({src: editedSrc, e});
                     }}
                     label={labels.save}
-                    defaultIcon='&#128190;'
+                    defaultIcon='&#x2713;'
                     tooltipPos='left'
                 />
                 <ActionButton
@@ -207,37 +272,39 @@ const CanvasEditor: FC<DefaultProps> = ({
                 />
             </ActionBlock>
             {/* let index > that canvas indexes */}
-            <SubActionContainer theme={theme} $index={5} $show={showSubActions}> 
+            <SubActionContainer theme={theme} $index={5} $show={showSubActions} $position={actionContainerSize}> 
                 <Button type='clean' className='sub-action-minimaze' onClick={() => setShowSubActions(false)}>
                     &#128469;
                 </Button>
                 {   
-                    mode === 'draw' ? (<ActionDrawOptions editorEngine={editorEngine} labels={labels}/>) :
+                    mode === MODES.DRAW ? (<ActionDrawOptions editorEngine={editorEngine} labels={labels} />) :
+                    mode === MODES.PAN ? (<ActionPanOptions editorEngine={editorEngine} labels={labels}/>) : 
                     ('')
                 }
             </SubActionContainer>
         </ActionConteiner>
 
-        <CanvasContainer className={classNamesCanvasContainer} ref={containerRef} theme={theme}>
+        <CanvasContainer className={classNamesCanvasContainer} ref={containerRef} theme={theme} $height={height}>
             <Canvas 
                 ref={canvasRefs.background} 
-                $height={height}
                 $index={1} 
                 className={`${classNamesCanvas} layer-bg`}
+                theme={theme}
 
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerOut={handlePointerOut}
                 onPointerEnter={handlePointerEnter}
+                onWheel={handleWheel}
 
                 style={{
                     cursor: pointer
                 }}
             />
-            <Canvas ref={canvasRefs.drawings} $height={height} $index={2} className={`${classNamesCanvas} layer-drawings layer-editor`}/>
-            <Canvas ref={canvasRefs.texts} $height={height} $index={3} className={`${classNamesCanvas} layer-texts layer-editor`}/>
-            <Canvas ref={canvasRefs.interactions} $height={height} $index={4} className={`${classNamesCanvas} layer-inters layer-editor`}/>
+            <Canvas ref={canvasRefs.drawings} $height={height} $index={2} theme={theme} className={`${classNamesCanvas} layer-drawings layer-editor`}/>
+            <Canvas ref={canvasRefs.texts} $height={height} $index={3} theme={theme} className={`${classNamesCanvas} layer-texts layer-editor`}/>
+            <Canvas ref={canvasRefs.interactions} $height={height} $index={4} theme={theme} className={`${classNamesCanvas} layer-inters layer-editor`}/>
         </CanvasContainer>
     </Container>;
 }
@@ -279,6 +346,8 @@ const ActionButton = ({
             ){
                 return true;
             }
+        }else if(action && action.mode && mode === action.mode){
+            return true;
         }else{
             return false;
         }
@@ -310,18 +379,24 @@ const ActionButton = ({
     </ActionButtonStyled>
 }
 
-const ActionToggle = ({label, children} : {label: LabelProps, children: any}) => {
+const ActionToggle = ({label, children, defaultIcon} : {label: LabelProps, children: any, defaultIcon: string}) => {
     const {theme} = useTheme();
+
+    useEffect(() => {
+        // console.log(theme);
+    })
 
     return (<ActionButtonMimicStyled theme={theme}>
         <CardToggle
+            xOverride='left'
+            yOverride='bottom'
             toggleTrigger={(trigger: any) => {
                 return (<CardToggleActions onClick={() => trigger()}>
                     <Tooltip
                         tipcontent={<Span>{label.txt}</Span>}
                         position='top'
                     >
-                        <ActionButtonIcon theme={theme}>{label.icon ? (<i className={label.icon}/>) : <>&#x2621;</>}</ActionButtonIcon>
+                        <ActionButtonIcon theme={theme}>{label.icon ? (<i className={label.icon}/>) : <>{defaultIcon}</>}</ActionButtonIcon>
                     </Tooltip>
                 </CardToggleActions>)
             }}
@@ -329,6 +404,49 @@ const ActionToggle = ({label, children} : {label: LabelProps, children: any}) =>
             {children}
         </CardToggle>
     </ActionButtonMimicStyled>)
+}
+
+const ActionSlider = ({
+    name,
+    value,
+    min,
+    max,
+    step,
+    label,
+    onChange
+} : {
+    name : string,
+    value: number,
+    min: number,
+    max: number,
+    step: number,
+    label: LabelProps,
+    onChange: (value: number) => void
+}) => {
+    return (<SlideAction style={{display: 'flex'}}>               
+        <SlideActionLabelContainer>
+            <Label>{label.txt}</Label>
+            <Range
+                name={name + '_input_slider'}
+                min={min}
+                max={max}
+                value={value}
+                onChange={(e: any) => onChange(Number(e.target.value))}
+                step={step}
+            />
+        </SlideActionLabelContainer>
+        <Input 
+                name={name}
+                min={min}
+                max={max}
+                type='number'
+                value={value}
+                onChange={(e: any) => onChange(Number(e.target.value))}
+                style={{
+                    marginLeft: '4px',
+                }}
+            />
+    </SlideAction>)
 }
 
 const ActionDrawOptions: FC<{
@@ -355,6 +473,37 @@ const ActionDrawOptions: FC<{
             min={2}
             max={100}
             style={{marginRight: '0.5rem'}}
+        />
+    </SubAction>;
+}
+
+const ActionPanOptions: FC<{
+    editorEngine: any, 
+    labels: TranslationsProps
+}> = ({editorEngine, labels}) => {
+    const {
+        scales,
+        setScales
+    } = editorEngine;
+
+    return <SubAction $flexDirection='column'>
+        <ActionSlider
+            name='rotate'
+            value={scales.rotate}
+            min={0}
+            max={360}
+            step={1}
+            label={labels.rotate}
+            onChange={(value: number) => {setScales({rotate: value})}}
+        />
+        <ActionSlider
+            name='zoom'
+            value={scales.zoom}
+            min={0.1}
+            max={3}
+            step={0.1}
+            label={labels.zoom}
+            onChange={(value: number) => {setScales({zoom: value})}}
         />
     </SubAction>;
 }
@@ -389,10 +538,17 @@ const ActionBlock = styled.div`
     padding: ${defaultXPM} ${defaultYPM};
     box-sizing: border-box;
     display: flex;
-    width: 50%;
-    align-items: center;
+    align-items: flex-start;
     justify-content: flex-start;
     flex-wrap: wrap;
+
+    &.pencils{
+        width: 70%;
+    }
+
+    &.window{
+        width: 30%;
+    }
 `;
 
 const CardToggleContainer = styled.div`
@@ -411,12 +567,15 @@ const CardToggleActions = styled.div`
 
 `;
 
-const CanvasContainer = styled.div`
+const CanvasContainer = styled.div<{$height: string}>`
     width: 100%;
+    height: ${props => props.$height};
     box-sizing: border-box;
     position: relative;
     display: flex;
     justify-content: center;
+    align-items: center;
+    overflow: hidden;
 
     &.layer-size-fixed{
         background-size: 40px 40px;
@@ -428,11 +587,12 @@ const CanvasContainer = styled.div`
     }
 `;
 
-const Canvas = styled.canvas<{$index: number, $height: string}>`
-    height: ${props => props.$height};
+const Canvas = styled.canvas<{$index: number}>`
+    height: 100%;
     width: auto;
     inset: 0;
     z-index: ${props => props.$index * 10};
+    border: 1px solid ${props => props.theme.border};
 
     &.layer-size-fixed{
         max-width: 80%;
@@ -479,6 +639,10 @@ const ActionButtonStyled = styled.button`
     &.disabled{
         opacity: 0.6;
     }
+
+    &:last-child{
+        margin-right: unset;
+    }
 `
 
 const ActionButtonMimicStyled = styled.div`
@@ -515,16 +679,19 @@ const ActionButtonIcon = styled.span`
     }
 `;
 
-const SubActionContainer = styled.div<{$show: boolean, $index: number}>`
+const SubActionContainer = styled.div<{$show: boolean, $index: number, $position: any}>`
     display: ${props => props.$show ? 'flex' : 'none'};
     justify-content: center;
     position: absolute;
-    bottom: -100%;
+    bottom: ${props => props.$position && props.$position.height > 1 ? `unset` : '-100%'};
+    top: ${props => props.$position ? `${props.$position.height}px` : 'unset'};
     left: 0;
     width: 100%;
     z-index: ${props => (props.$index + 1) * 10};
     background-color: ${props => transparentize(0.05, props.theme.background)};
-    padding-top: 1rem;
+    padding: ${defaultXPM} ${defaultYPM};
+    padding-top: 1rem; /* Let top a bit bigger */
+    box-sizing: border-box;
 
     button.sub-action-minimaze{
         position: absolute;
@@ -533,8 +700,44 @@ const SubActionContainer = styled.div<{$show: boolean, $index: number}>`
     }
 `;
 
-const SubAction = styled.div`
+const SubAction = styled.div<{$flexDirection: string}>`
     display: flex;
     align-items: center;
+    flex-direction: ${props => props.$flexDirection ? props.$flexDirection : 'row'};
     padding: ${defaultYPM} ${defaultXPM};
+    max-width: 100%;
+    box-sizing: border-box;
+`;
+
+const ActionPipe = styled.div`
+    display: block;
+    height: 2rem;
+    margin: 0 ${defaultXPM};
+    display: flex;
+    align-items: center;
+`;
+
+const SmallPipe = styled.div`
+    display: block;
+    height: 15px;
+    width: 1px;
+    background-color: ${props => props.theme.border};
+`;
+
+const SlideAction = styled.div`
+    margin-bottom: 0.5rem;
+    margin-right: 1rem;
+    position: relative;
+    max-width: 100%;
+
+    .cl-themed__radio-multi{
+        flex-wrap: wrap;
+        max-height: 5rem;
+    }
+`;
+
+const SlideActionLabelContainer = styled.div`
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
 `;

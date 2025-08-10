@@ -1,4 +1,6 @@
 import { Tool } from "./useDrawSettings";
+import { FilterSettings } from "./useFilterSettings";
+import { ScaleSettings } from "./useScaleSettings";
 
 export type Point = { x: number; y: number };
 
@@ -21,7 +23,19 @@ export type TextObject = {
     color: string;
 };
 
-export type CanvasObject = DrawingObject | TextObject;
+export type FilterObject = {
+    id: string;
+    type: 'filter';
+    values: FilterSettings;
+};
+
+export type ScaleObject = {
+    id: string;
+    type: 'scale';
+    values: ScaleSettings;
+};
+
+export type CanvasObject = DrawingObject | TextObject | FilterObject | ScaleObject;
 
 export interface EditorState {
     backgroundImage: HTMLImageElement | null;

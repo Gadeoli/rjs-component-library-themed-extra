@@ -16,7 +16,70 @@ export default meta;
 
 type Story = StoryObj<StoryProps>;
 
-export const DefaultImageEditor: Story = {
+export const Drawer: Story = {
+    args: {
+        testSrcUrl: "",
+        onSaveToImage: ({src, e}) => console.log({src, e}),
+        onCancel: () => console.log('cancel clicked'),
+        loading: false,
+        className: "",
+        type: "free-editor",
+        style: {}
+        /*
+        labels = {
+            ...
+        }
+        */,
+
+        backgroundSrc: ''
+    },
+    argTypes: {
+        testSrcUrl: {
+            type: {name: 'string', required: false},
+        },
+        backgroundSrc: {
+            description: 'img src'
+        },
+        onSaveToImage: {
+            description: 'function to run on onchange event. this will recieve the event'
+        },
+        labels: {
+            
+        },
+        loading: {
+            type: {name: 'boolean', required: false},
+            defaultValue: false,
+            description: 'Loading effect, if true add a class: loading-effect to component'
+        },
+        className: {
+            type: {name: 'string', required: false},
+            defaultValue: '',
+            description: 'full;'
+        },
+        style: {
+            table: { type: { summary: 'any'} },
+            defaultValue: null,
+            description: 'custom styles. This field is not required'
+        }    
+    },
+    render: ({testSrcUrl, ...args}) => {
+        const [savedSrc, setSavedSrc] = useState<string | undefined>('');
+
+        return (<Container>
+            <CanvasEditor 
+                {...{...args}} 
+                onSaveToImage={(props : any) => setSavedSrc(props.src)}
+                // height='500px'
+            />
+
+            {savedSrc && (<div style={{marginTop: '40px'}}>
+                <ImgResult src={savedSrc} alt='saved img - preview' style={{width: '300px'}}/>
+            </div>)}
+        </Container>)
+    }
+};
+
+export const Image: Story = {
     args: {
         testSrcUrl: "",
         onSaveToImage: ({src, e}) => console.log({src, e}),
@@ -108,19 +171,20 @@ export const DefaultImageEditor: Story = {
 
             <CanvasEditor {...{...args, backgroundSrc: bgSource}} onSaveToImage={(props : any) => setSavedSrc(props.src)}/>
 
-            <img src={savedSrc} alt='saved img - preview' style={{width: '300px', marginTop: '40px'}}/>
+            {savedSrc && <img src={savedSrc} alt='saved img - preview' style={{width: '300px', marginTop: '40px'}}/>}
         </Container>)
     }
 };
 
-export const DefaultEditor: Story = {
+export const Signature: Story = {
     args: {
         testSrcUrl: "",
         onSaveToImage: ({src, e}) => console.log({src, e}),
         onCancel: () => console.log('cancel clicked'),
         loading: false,
+        height: '350px',
         className: "",
-        type: "free-editor",
+        type: "signature-editor",
         style: {}
         /*
         labels = {
@@ -169,9 +233,9 @@ export const DefaultEditor: Story = {
                 // height='500px'
             />
 
-            <div style={{marginTop: '40px'}}>
+            {savedSrc && (<div style={{marginTop: '40px'}}>
                 <ImgResult src={savedSrc} alt='saved img - preview' style={{width: '300px'}}/>
-            </div>
+            </div>)}
         </Container>)
     }
 };

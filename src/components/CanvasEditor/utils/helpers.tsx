@@ -1,7 +1,8 @@
 import uuid from "../../../helpers/uuid";
 import { CanvasContexts, CanvasRefs } from "../hooks/useCanvasLayerRefs";
 import { DRAW_TOOLS } from "../hooks/useDrawSettings";
-import { Command, DrawingObject, EditorState, Point, TextObject } from "../hooks/useEditorEngine.types";
+import { Command, DrawingObject, EditorState, FilterObject, Point, ScaleObject, TextObject } from "../hooks/useEditorEngine.types";
+import { ScaleSettings } from "../hooks/useScaleSettings";
 
 export const initialPoint = {x: 0, y: 0};
 
@@ -10,6 +11,7 @@ export const hasAllLayers = (ctxs: CanvasContexts) : ctxs is CanvasContexts & { 
 export const renderEditorState = (state: EditorState, ctxs: CanvasContexts) => {
     if (!hasAllLayers(ctxs)) return;
 
+    renderAllLayer(state, ctxs); //should be first
     renderBackgroundLayer(state, ctxs.background);
     renderDrawingsLayer(state, ctxs.drawings);
     renderTextsLayer(state, ctxs.texts);
@@ -20,7 +22,14 @@ export const renderBackgroundLayer = (state: EditorState, ctx: CanvasRenderingCo
         const w = state.backgroundImage.width;
         const h = state.backgroundImage.height;
 
+        const filters = state.objects.filter(obj => obj.type === "filter");
+
+        if(filters.length){
+            applyFilters(ctx, filters[filters.length - 1]);
+        }
+
         ctx.drawImage(state.backgroundImage, 0, 0, w, h);
+        ctx.restore();
     }else{
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     }
@@ -45,10 +54,19 @@ export const renderDrawingsLayer = (state: EditorState, ctx: CanvasRenderingCont
 
 export const renderTextsLayer = (state: EditorState, ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    
     for (const obj of state.objects) {
         if (obj.type === "text") {
             drawTextObject(ctx, obj);
         }
+    }
+}
+
+export const renderAllLayer = (state: EditorState, ctxs: CanvasContexts) => {
+    const scales = state.objects.filter(obj => obj.type === "scale");
+
+    if(scales.length){
+        applyScales(ctxs, scales[scales.length - 1], state.backgroundImage);
     }
 }
 
@@ -91,6 +109,42 @@ export const setBackgroundImageCommand = (
     };
 }
 
+export const updateFiltersCommand = (filtering: FilterObject): Command => {
+    const id = uuid(); 
+
+    return {
+        id,
+        label: 'background-filter-change',
+        do: (state) => ({
+            ...state,
+            objects: [...state.objects, filtering],
+        }),
+        undo: (state) => ({
+            ...state,
+            objects: state.objects.filter(obj => obj.id !== id)
+        }),
+        affectedLayers: ["background"],
+    };
+}
+
+export const updateScalesCommand = (scalling: ScaleObject): Command => {
+    const id = uuid();
+
+    return {
+        id,
+        label: 'canvas-scale-change',
+        do: (state) => ({
+            ...state,
+            objects: [...state.objects, scalling],
+        }),
+        undo: (state) => ({
+            ...state,
+            objects: state.objects.filter(obj => obj.id !== id)
+        }),
+        affectedLayers: "all",
+    };
+}
+
 const drawPathObject = (ctx: CanvasRenderingContext2D, obj: DrawingObject) => {
     const { points } = obj;
 
@@ -122,7 +176,9 @@ export const drawStroke = (
 
     if(!points) return;
 
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    if(!obj.erase){
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    }
 
     ctx.save();
     styleCtx(ctx, obj);
@@ -254,6 +310,75 @@ export const drawArrowHead = (
     return [left, right, tip];
 };
 
+export const applyFilters = (
+    ctx: CanvasRenderingContext2D,
+    obj: FilterObject
+) => {
+    const {
+        brightness,
+        contrast,
+        grayscale,
+        saturate
+    } = obj.values;
+
+    const filterStyle = `brightness(${brightness}%) contrast(${contrast}%) grayscale(${grayscale}%) saturate(${saturate}%)`;
+
+    ctx.filter = filterStyle;
+    ctx.save();
+}
+
+export const applyScales = (
+    ctxs: CanvasContexts,
+    obj: ScaleObject,
+    bgImage: HTMLImageElement | null
+) => {
+    const { rotate, zoom } = obj.values;
+
+    const w = bgImage?.width || 0;
+    const h = bgImage?.height || 0;
+
+    const zoomW = w * obj.values.zoom; 
+    const zoomH = h * obj.values.zoom;
+
+    const translateX = (w - zoomW) / 2;
+    const translateY = (h - zoomH) / 2;
+
+    for(const key in ctxs){
+        const ctx = ctxs[key as keyof typeof ctxs];
+
+        if(ctx){
+            //reset ctx
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);        
+            ctx.setTransform(1, 0, 0, 1, 0, 0);    
+
+            if(rotate){
+                const centerX = ctx.canvas.width / 2;
+                const centerY = ctx.canvas.height / 2;
+                const angle = (rotate * Math.PI) / 180;
+
+                ctx.translate(centerX, centerY);
+                ctx.rotate(angle);
+                ctx.translate(-centerX, -centerY);
+            }
+
+            if (obj.values.flipHorizontal) {
+                ctx.translate(ctx.canvas.width, 0);
+                ctx.scale(-1, 1);
+            }
+
+            if (obj.values.flipVertical) {
+                ctx.translate(0, ctx.canvas.height);
+                ctx.scale(1, -1);
+            }
+
+            ctx.translate(translateX + obj.values.offset.x, translateY + obj.values.offset.y);
+            ctx.scale(zoom, zoom);
+            ctx.filter = 'none';
+            ctx.save();
+        }
+    }
+}
+
 export const styleCtx = (
     ctx: CanvasRenderingContext2D,
     obj: Partial<DrawingObject>
@@ -288,13 +413,17 @@ export const clearLayer = (
 export const getMousePos = (
     e: React.MouseEvent<HTMLCanvasElement>, 
     canvasRef: React.RefObject<HTMLCanvasElement | null>,
-    offset: Point = initialPoint,
-    zoom: number = 1,
-    flipX: boolean = false,
-    flipY: boolean = false,
-    rotate: number = 0,
+    scaleSettings: ScaleSettings
 ): Point => {
     const defaultPos = initialPoint;
+
+    const {
+        flipHorizontal,
+        flipVertical,
+        zoom,
+        rotate,
+        offset
+    } = scaleSettings
     
     const canvas = canvasRef.current;
     const rect = canvas?.getBoundingClientRect();
@@ -324,10 +453,10 @@ export const getMousePos = (
     y /= zoom;
 
     // Apply flip correction
-    if (flipX) x = canvas.width - x;
-    if (flipY) y = canvas.height - y;
+    if (flipHorizontal) x = canvas.width - x;
+    if (flipVertical) y = canvas.height - y;
 
-    // Step 5: undo rotation (about center)
+    // Undo rotation (about center)
     const cx = canvas.width / 2;
     const cy = canvas.height / 2;
     const dx = x - cx;
@@ -357,26 +486,40 @@ export const setCanvasSizeFromImage = (
     canvasRefs: CanvasRefs,
     image: HTMLImageElement,
     containerSizes: any,
-    fixCssWidth?:number
+    fixCssWidth=1
 ) => {
+    //image
     const w = image.width;
     const h = image.height;
+    const ratioI = w / h;
+    
+    //canvas container
+    const cw = (containerSizes?.width || 0) * fixCssWidth;
+    const ch = (containerSizes?.height || 0);
+    const ratioC = cw / ch;
+
+    //canvas
+    let cvStyleH = ch;
+    let cvStyleW = cw * (ratioI / ratioC);
+
+    //fix canvas container ratio (reducing canvas style height)
+    if(cvStyleW > cw){
+        cvStyleH = cw * cvStyleH / cvStyleW;
+    }
+
+    //document
     const dpr = window.devicePixelRatio || 1;
-    
-    const containerW = (containerSizes?.width || 0) * dpr;
-    const containerH = (containerSizes?.height || 0) * dpr;
-    
-    const imageRatio = w / h;
-    const containerRatio = containerW / containerH;
 
     /*
     console.log({
-        containerW,
-        containerH,
+        cw,
+        ch,
         w,
         h,
-        imageRatio,
-        containerRatio
+        cvStyleW,
+        cvStyleH,
+        ratioI,
+        ratioC,
     });
     */
 
@@ -386,33 +529,15 @@ export const setCanvasSizeFromImage = (
         if (canvas) {
             let canvasH = h;
             let canvasW = w;
-            let fixRatioWScale = 1;
-            let fixRatioHScale = 1;
-
-            //canvas cant handle default image sizes
-            if(containerW && containerRatio < imageRatio && fixCssWidth){
-                const fix = imageRatio / containerRatio;
-
-                if(containerH > containerW){
-                    fixRatioHScale = fix / 0.8;
-                }else{
-                    fixRatioWScale = fix / 0.8;
-                }
-            }
-
-            canvasH = canvasH * dpr * fixRatioHScale;
-            canvasW = canvasW * dpr * fixRatioWScale;
+            
+            //Apply fixes in canvasH and canvasW
+            //zoom fix, panning fix etc...
 
             canvas.width = canvasW;
             canvas.height = canvasH;
 
-            // commented out - canvas follow container sizes / image sizes
-            // canvas.style.width = `${w}px`;
-            // canvas.style.height = `${h}px`;
-            
-            const ctx = canvas.getContext("2d");
-            
-            if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            canvas.style.width = `${cvStyleW}px`;
+            canvas.style.height = `${cvStyleH}px`;
         }
     }
 } 
@@ -457,16 +582,24 @@ export const generateCanvasImage = (canvasLayers : HTMLCanvasElement[], outputSi
 
 export const defaultLabels = {
     arrow: {txt: 'Arrow'},
+    brightness: {txt: 'Brightness'},
     cancel: {txt: 'Cancel'},
     circle: {txt: 'Circle'},
+    contrast: {txt: 'Contrast'},
     draw: {txt: 'Draw'},
+    filters: {txt: 'Filters'},
+    grayscale: {txt: 'Grayscale'},
     settings: {txt: 'Tools'},
     eraser: {txt: 'Eraser'},
     line: {txt: 'Line'},
+    pan_zoom: {txt: 'Pan & Zoom'},
     pen: {txt: 'Pen'},
     redo: {txt: 'Redo'},
     restore: {txt: 'Restore'},
+    rotate: {txt: 'Rotate'},
+    saturate: {txt: 'Saturate'},
     save: {txt: 'Save'},
     shapes: {txt: 'Shapes'},
-    undo: {txt: 'Undo'}
+    undo: {txt: 'Undo'},
+    zoom: {txt: 'Zoom'}
 }
