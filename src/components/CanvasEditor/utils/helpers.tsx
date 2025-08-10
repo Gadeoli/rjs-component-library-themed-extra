@@ -11,10 +11,10 @@ export const hasAllLayers = (ctxs: CanvasContexts) : ctxs is CanvasContexts & { 
 export const renderEditorState = (state: EditorState, ctxs: CanvasContexts) => {
     if (!hasAllLayers(ctxs)) return;
 
+    renderAllLayer(state, ctxs); //should be first
     renderBackgroundLayer(state, ctxs.background);
     renderDrawingsLayer(state, ctxs.drawings);
     renderTextsLayer(state, ctxs.texts);
-    renderAllLayer(state, ctxs);
 }
 
 export const renderBackgroundLayer = (state: EditorState, ctx: CanvasRenderingContext2D) => {
@@ -29,6 +29,7 @@ export const renderBackgroundLayer = (state: EditorState, ctx: CanvasRenderingCo
         }
 
         ctx.drawImage(state.backgroundImage, 0, 0, w, h);
+        ctx.restore();
     }else{
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     }
@@ -53,6 +54,7 @@ export const renderDrawingsLayer = (state: EditorState, ctx: CanvasRenderingCont
 
 export const renderTextsLayer = (state: EditorState, ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    
     for (const obj of state.objects) {
         if (obj.type === "text") {
             drawTextObject(ctx, obj);
@@ -64,7 +66,7 @@ export const renderAllLayer = (state: EditorState, ctxs: CanvasContexts) => {
     const scales = state.objects.filter(obj => obj.type === "scale");
 
     if(scales.length){
-        console.log({scales});
+        applyScales(ctxs, scales[scales.length - 1], state.backgroundImage);
     }
 }
 
@@ -307,6 +309,7 @@ export const drawArrowHead = (
 
     return [left, right, tip];
 };
+
 export const applyFilters = (
     ctx: CanvasRenderingContext2D,
     obj: FilterObject
@@ -326,10 +329,54 @@ export const applyFilters = (
 
 export const applyScales = (
     ctxs: CanvasContexts,
-    obj: ScaleObject
+    obj: ScaleObject,
+    bgImage: HTMLImageElement | null
 ) => {
-    if (!hasAllLayers(ctxs)) return;
-    console.log('scale to apply');
+    const { rotate, zoom } = obj.values;
+
+    const w = bgImage?.width || 0;
+    const h = bgImage?.height || 0;
+
+    const zoomW = w * obj.values.zoom; 
+    const zoomH = h * obj.values.zoom;
+
+    const translateX = (w - zoomW) / 2;
+    const translateY = (h - zoomH) / 2;
+
+    for(const key in ctxs){
+        const ctx = ctxs[key as keyof typeof ctxs];
+
+        if(ctx){
+            //reset ctx
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);        
+            ctx.setTransform(1, 0, 0, 1, 0, 0);    
+
+            if(rotate){
+                const centerX = ctx.canvas.width / 2;
+                const centerY = ctx.canvas.height / 2;
+                const angle = (rotate * Math.PI) / 180;
+
+                ctx.translate(centerX, centerY);
+                ctx.rotate(angle);
+                ctx.translate(-centerX, -centerY);
+            }
+
+            if (obj.values.flipHorizontal) {
+                ctx.translate(ctx.canvas.width, 0);
+                ctx.scale(-1, 1);
+            }
+
+            if (obj.values.flipVertical) {
+                ctx.translate(0, ctx.canvas.height);
+                ctx.scale(1, -1);
+            }
+
+            ctx.translate(translateX + obj.values.offset.x, translateY + obj.values.offset.y);
+            ctx.scale(zoom, zoom);
+            ctx.filter = 'none';
+            ctx.save();
+        }
+    }
 }
 
 export const styleCtx = (

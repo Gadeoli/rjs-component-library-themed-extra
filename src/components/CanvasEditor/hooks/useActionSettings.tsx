@@ -14,6 +14,7 @@ export interface ActionSettings {
     isDrawing: boolean;
     isDragging: boolean;
     isInside: boolean;
+    alreadyPan: boolean;
     pointer: string;
     offset: Point;
 }
@@ -24,6 +25,7 @@ const useActionSettings = (initial?: Partial<ActionSettings>) => {
         isDrawing: false,
         isDragging: false,
         isInside: false,
+        alreadyPan: false,
         pointer: 'default',
         offset: {x: 0, y: 0},
         ...initial,
@@ -47,6 +49,10 @@ const useActionSettings = (initial?: Partial<ActionSettings>) => {
         ref,
         ui: uiState,
         update,
+        reset: () => {
+            ref.current = {...ref.current, ...defaultSettings};
+            setUiState({...ref.current, ...defaultSettings});
+        }
     };
 }
 

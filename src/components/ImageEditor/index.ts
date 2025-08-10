@@ -1,1 +1,1 @@
-// export { default } from './ImageEditor'; //Not exporting until fix modes and stacks
+// export { default } from './ImageEditor'; //Not exporting, bs bad state handles

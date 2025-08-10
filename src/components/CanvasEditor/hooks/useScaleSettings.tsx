@@ -31,6 +31,10 @@ const useScaleSettings = (initial?: Partial<ScaleSettings>) => {
         ref,
         ui: uiState,
         update,
+        reset: () => {
+            ref.current = {...ref.current, ...defaultSettings};
+            setUiState({...ref.current, ...defaultSettings});
+        }
     };
 }
 

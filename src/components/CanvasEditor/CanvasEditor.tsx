@@ -115,7 +115,7 @@ const CanvasEditor: FC<DefaultProps> = ({
 
     return <Container theme={theme} className={classNames} style={style} $visible={containerVisible}>
         <ActionConteiner theme={theme} ref={actionContainerRef}>
-            <ActionBlock>
+            <ActionBlock className='pencils'>
                 <ActionButton
                     settings={editorEngine}
                     action={{
@@ -134,7 +134,7 @@ const CanvasEditor: FC<DefaultProps> = ({
                     label={labels.eraser}
                     defaultIcon='&#x232B;'
                 />
-                <ActionToggle label={labels.shapes} defaultIcon='&#x2621;'>
+                {type !== 'signature-editor' ? (<ActionToggle label={labels.shapes} defaultIcon='&#x2621;'>
                     <CardToggleContainer theme={theme}>
                         <ActionButton
                             settings={editorEngine}
@@ -164,7 +164,8 @@ const CanvasEditor: FC<DefaultProps> = ({
                             defaultIcon='&#9711;'
                         />
                     </CardToggleContainer>            
-                </ActionToggle>
+                </ActionToggle>) : ('')}
+                
                 <ActionButton
                     settings={editorEngine}
                     onClick={() => setShowSubActions(!showSubActions)}
@@ -198,7 +199,7 @@ const CanvasEditor: FC<DefaultProps> = ({
 
                 <ActionPipe theme={theme}><SmallPipe theme={theme}/></ActionPipe>
 
-                <ActionToggle label={labels.filters} defaultIcon='&#9929;'>
+                {type !== 'signature-editor' ? (<ActionToggle label={labels.filters} defaultIcon='&#9929;'>
                     <CardToggleContainer theme={theme}>
                         <ActionSlider
                             name='brightness'
@@ -236,37 +237,20 @@ const CanvasEditor: FC<DefaultProps> = ({
                             label={labels.grayscale}
                             onChange={(value: number) => {setFilters({grayscale: value})}}
                         />
-                        <ActionSlider
-                            name='rotate'
-                            value={scales.rotate}
-                            min={0}
-                            max={360}
-                            step={1}
-                            label={labels.rotate}
-                            onChange={(value: number) => {setScales({rotate: value})}}
-                        />
-                        <ActionSlider
-                            name='zoom'
-                            value={scales.zoom}
-                            min={0.1}
-                            max={3}
-                            step={0.1}
-                            label={labels.zoom}
-                            onChange={(value: number) => {setScales({zoom: value})}}
-                        />
                     </CardToggleContainer>        
-                </ActionToggle>   
+                </ActionToggle>) : ('')}
 
-                <ActionButton
+                {type !== 'signature-editor' ? (<ActionButton
                     settings={editorEngine}
                     action={{
                         mode: MODES.PAN,
                     }}
+                    onClick={() => setShowSubActions(!showSubActions)}
                     label={labels.pan_zoom}
                     defaultIcon='P'
-                />   
+                />) : ('')} 
             </ActionBlock>
-            <ActionBlock style={{justifyContent: 'flex-end'}}>
+            <ActionBlock className='window' style={{justifyContent: 'flex-end'}}>
                 <ActionButton
                     settings={editorEngine}
                     onClick={ async (e: any) => {
@@ -293,7 +277,8 @@ const CanvasEditor: FC<DefaultProps> = ({
                     &#128469;
                 </Button>
                 {   
-                    mode === 'draw' ? (<ActionDrawOptions editorEngine={editorEngine} labels={labels}/>) :
+                    mode === MODES.DRAW ? (<ActionDrawOptions editorEngine={editorEngine} labels={labels} />) :
+                    mode === MODES.PAN ? (<ActionPanOptions editorEngine={editorEngine} labels={labels}/>) : 
                     ('')
                 }
             </SubActionContainer>
@@ -492,6 +477,37 @@ const ActionDrawOptions: FC<{
     </SubAction>;
 }
 
+const ActionPanOptions: FC<{
+    editorEngine: any, 
+    labels: TranslationsProps
+}> = ({editorEngine, labels}) => {
+    const {
+        scales,
+        setScales
+    } = editorEngine;
+
+    return <SubAction $flexDirection='column'>
+        <ActionSlider
+            name='rotate'
+            value={scales.rotate}
+            min={0}
+            max={360}
+            step={1}
+            label={labels.rotate}
+            onChange={(value: number) => {setScales({rotate: value})}}
+        />
+        <ActionSlider
+            name='zoom'
+            value={scales.zoom}
+            min={0.1}
+            max={3}
+            step={0.1}
+            label={labels.zoom}
+            onChange={(value: number) => {setScales({zoom: value})}}
+        />
+    </SubAction>;
+}
+
 const Container = styled.div<{$visible: boolean}>`
     box-sizing: border-box;
     width: 100%;
@@ -522,10 +538,17 @@ const ActionBlock = styled.div`
     padding: ${defaultXPM} ${defaultYPM};
     box-sizing: border-box;
     display: flex;
-    width: 50%;
     align-items: flex-start;
     justify-content: flex-start;
     flex-wrap: wrap;
+
+    &.pencils{
+        width: 70%;
+    }
+
+    &.window{
+        width: 30%;
+    }
 `;
 
 const CardToggleContainer = styled.div`
@@ -666,7 +689,9 @@ const SubActionContainer = styled.div<{$show: boolean, $index: number, $position
     width: 100%;
     z-index: ${props => (props.$index + 1) * 10};
     background-color: ${props => transparentize(0.05, props.theme.background)};
-    padding-top: 1rem;
+    padding: ${defaultXPM} ${defaultYPM};
+    padding-top: 1rem; /* Let top a bit bigger */
+    box-sizing: border-box;
 
     button.sub-action-minimaze{
         position: absolute;
@@ -675,10 +700,13 @@ const SubActionContainer = styled.div<{$show: boolean, $index: number, $position
     }
 `;
 
-const SubAction = styled.div`
+const SubAction = styled.div<{$flexDirection: string}>`
     display: flex;
     align-items: center;
+    flex-direction: ${props => props.$flexDirection ? props.$flexDirection : 'row'};
     padding: ${defaultYPM} ${defaultXPM};
+    max-width: 100%;
+    box-sizing: border-box;
 `;
 
 const ActionPipe = styled.div`
@@ -700,6 +728,7 @@ const SlideAction = styled.div`
     margin-bottom: 0.5rem;
     margin-right: 1rem;
     position: relative;
+    max-width: 100%;
 
     .cl-themed__radio-multi{
         flex-wrap: wrap;

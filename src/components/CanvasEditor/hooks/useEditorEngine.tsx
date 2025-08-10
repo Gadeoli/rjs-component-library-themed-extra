@@ -71,7 +71,7 @@ const useEditorEngine = (
     const [, forceUpdate] = useState(0);
     const actionSettings = useActionSettings();
     const mode = actionSettings.ref.current.mode;
-    const {isDrawing, isDragging, isInside} = actionSettings.ref.current;
+    const {isDrawing, isDragging, isInside, alreadyPan} = actionSettings.ref.current;
     const drawSettings = useDrawSettings();
     const filterSettings = useFilterSettings();
     const scaleSettings = useScaleSettings();
@@ -105,6 +105,9 @@ const useEditorEngine = (
 
     const reset = useCallback(() => {
         engineRef.current!.reset();
+        filterSettings.reset();
+        scaleSettings.reset();
+        actionSettings.reset();
         forceRender();
     }, [forceRender]);
 
@@ -139,9 +142,10 @@ const useEditorEngine = (
                 }
             }else if( mode === MODES.PAN ){
                 actionSettings.update({isDragging: true});
+                const {offset, flipVertical, flipHorizontal} = scales;
 
-                const x = event.clientX - (scales.flipHorizontal ? -scales.offset.x : scales.offset.x);
-                const y = event.clientY - (scales.flipVertical ? -scales.offset.y : scales.offset.y);
+                const x = event.clientX - (flipHorizontal ? -offset.x : offset.x);
+                const y = event.clientY - (flipVertical ? -offset.y : offset.y);
 
                 currentPath.push({x, y});
             }else{
@@ -262,6 +266,7 @@ const useEditorEngine = (
         const canvasRef = canvasRefs.interactions;
         const ctx = contexts.interactions;
         const tool = drawSettings.ref.current.tool;
+        const scales = scaleSettings.ref.current;
 
         if(canvasRef && ctx){
             const mousePos = getMousePos(event, canvasRef, scaleSettings.ref.current);
@@ -297,6 +302,25 @@ const useEditorEngine = (
 
                 actionSettings.update({isDrawing: false});
             }else if(mode === MODES.PAN && isDragging){
+                if (event.cancelable) {
+                    event.preventDefault();
+                }
+
+                const initialPos = currentPath.paths.current[0] || initialPoint;
+                const offsetDelta = {
+                    x: event.clientX - initialPos.x,
+                    y: event.clientY - initialPos.y
+                };
+
+                const newPos = {
+                    x: scales.flipHorizontal ? -offsetDelta.x : offsetDelta.x,
+                    y: scales.flipVertical ? -offsetDelta.y : offsetDelta.y
+                }
+                
+                currentPath.push(newPos);
+                setScales({offset: newPos})
+
+                currentPath.reset();
                 actionSettings.update({isDragging: false});
             }
         }
@@ -335,12 +359,17 @@ const useEditorEngine = (
     };
 
     //UI Setters
-    const setMode = (mode: Mode) => actionSettings.update({mode: mode}); 
+    const setMode = (mode: Mode) => {
+        currentPath.reset(); //clear path between mode changes
+        actionSettings.update({mode: mode});
+    }; 
     const setDrawTool = (tool: Tool) => drawSettings.update({tool: tool});
     const setEditedImage = (src : string) => {
         const image = new Image();
         image.src = src;
         image.onload = () => {
+            reset();
+            
             const prevImage = engineRef.current!.getState().backgroundImage;
             const biggerSize = getBiggerSize(image);
             const fixCssWidth = configs?.fixCssWidth || 1;
