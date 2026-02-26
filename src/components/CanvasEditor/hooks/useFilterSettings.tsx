@@ -28,6 +28,10 @@ const useFilterSettings = (initial?: Partial<FilterSettings>) => {
         ref,
         ui: uiState,
         update,
+        reset: () => {
+            ref.current = {...ref.current, ...defaultSettings};
+            setUiState({...ref.current, ...defaultSettings});
+        }
     };
 }
 

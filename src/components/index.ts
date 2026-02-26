@@ -1,2 +1,1 @@
-// export { default as ImageEditor } from './ImageEditor'; //need to fix logic errors before export
-// export { default as CanvasEditor } from './CanvasEditor'; //need to fix logic errors before export
+export { default as CanvasEditor } from './CanvasEditor';

@@ -3,7 +3,7 @@ export interface DefaultProps {
      * free-editor is more like ms paint (no image filters)
      * image-editor is a editor that reacts/custom a given image
      */
-    type: 'free-editor' | 'image-editor';
+    type: 'free-editor' | 'image-editor' | 'signature-editor';
 
     /**
      * The image source.
@@ -14,6 +14,13 @@ export interface DefaultProps {
      * The canvas height. Default: '500px'
      */
     height?: string;
+
+    /**
+     * The canvas width. Default: 
+     * '100%' for free-editor or signature-editor
+     * '80%' for image-editor
+     */
+    width?: string;
 
     /**
      * Function invoked when the edited image is saved.
